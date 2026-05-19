@@ -14,7 +14,7 @@ import {
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
-const TYPE_COLOR: Record<string, string> = {
+export const TYPE_COLOR: Record<string, string> = {
   Technology: "#7C5CFF",
   Concept: "#FF6BD6",
   Organization: "#FFB454",
@@ -24,6 +24,61 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+
+// 关键布局全部用内联 style，避免 Tailwind 未生效时坍方
+// （Notion 导出曾以丢失内联 style 的方式现过过 BUG，这里明确写全）
+const styles = {
+  canvasShell: {
+    position: "relative" as const,
+    width: "100%",
+    height: "calc(100vh - 160px)",
+    minHeight: 560,
+    background: "#0b0b0f",
+    borderRadius: 12,
+    overflow: "hidden",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+  },
+  searchBox: {
+    position: "absolute" as const,
+    top: 16,
+    left: 16,
+    zIndex: 10,
+    width: 240,
+    padding: "8px 12px",
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 8,
+    color: "#fff",
+    outline: "none",
+    backdropFilter: "blur(8px)",
+  },
+  emptyState: {
+    position: "absolute" as const,
+    inset: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 16,
+    pointerEvents: "none" as const,
+  },
+  detailPanel: {
+    position: "absolute" as const,
+    bottom: 16,
+    right: 304, // 避开右侧 ControlPanel
+    zIndex: 20,
+    width: 288,
+    maxHeight: "60%",
+    overflowY: "auto" as const,
+    padding: 16,
+    background: "rgba(0,0,0,0.55)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 8,
+    backdropFilter: "blur(12px)",
+    color: "#fff",
+    fontSize: 13,
+  },
+};
 
 export default function GraphPage() {
   const fgRef = useRef<any>(null);
@@ -189,14 +244,14 @@ export default function GraphPage() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">知识图谱</h1>
-          <p className="text-gray-600">
-            Obsidian 风格力导向可视化 — {stats.nodes} 节点 · {stats.links} 边 · {stats.types} 类型
+          <p className="text-sm text-gray-600">
+            Obsidian 风格力导向可视化 · {stats.nodes} 节点 · {stats.links} 边 · {stats.types} 类型
+            <span className="text-gray-400 ml-2">（单击聚焦，双击跳转或看邻居）</span>
           </p>
-          <p className="text-xs text-gray-400 mt-1">提示：单击节点聚焦，双击节点跳转或打开详情</p>
         </div>
         <button
           onClick={fetchGraph}
@@ -206,65 +261,50 @@ export default function GraphPage() {
         </button>
       </div>
 
-      <div
-        className="relative rounded-xl overflow-hidden border border-gray-200 shadow-lg"
-        style={{ height: "calc(100vh - 220px)", background: "#0b0b0f" }}
-      >
+      {/* 画布容器：内联 style 保证高度/背景/相对定位一定生效 */}
+      <div style={styles.canvasShell}>
         {/* 搜索框 */}
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索实体..."
-          className="absolute top-4 left-4 z-10 px-3 py-2 bg-white/10 border border-white/10 rounded-lg text-white w-60 backdrop-blur-md outline-none focus:border-purple-500/50 transition placeholder:text-white/30"
+          style={styles.searchBox}
         />
 
-        {/* 图例 */}
-        <div className="absolute top-4 left-72 z-10 p-3 rounded-lg text-white text-xs space-y-1 bg-white/5 border border-white/10 backdrop-blur-md">
-          {Object.entries(TYPE_COLOR).map(([type, color]) => (
-            <div key={type} className="flex items-center gap-2">
-              <span
-                className="inline-block w-2.5 h-2.5 rounded-full"
-                style={{ background: color }}
-              />
-              {type}
-            </div>
-          ))}
-        </div>
-
-        {/* 控制面板 */}
+        {/* 右侧设置面板（含颜色组 / 筛选 / 外观 / 力度） */}
         <ControlPanel
           value={settings}
           onChange={setSettings}
           onReplay={() => fgRef.current?.d3ReheatSimulation()}
           onReset={() => setSettings(DEFAULT_SETTINGS)}
+          typeColor={TYPE_COLOR}
         />
 
         {/* 实体详情面板 */}
         {detailEntity && (
-          <div className="absolute bottom-4 right-80 z-20 w-72 max-h-[60%] overflow-y-auto p-4 rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 text-white text-sm">
+          <div style={styles.detailPanel}>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold truncate">{detailEntity.entity}</h3>
               <button
                 onClick={() => setDetailEntity(null)}
-                className="opacity-60 hover:opacity-100"
+                style= opacity: 0.6, background: "transparent", border: 0, color: "#fff", cursor: "pointer" 
                 aria-label="关闭"
               >
                 ✕
               </button>
             </div>
             {detailLoading ? (
-              <p className="opacity-60 text-xs">加载中...</p>
+              <p style= opacity: 0.6, fontSize: 12 >加载中...</p>
             ) : detailEntity.neighbors.length === 0 ? (
-              <p className="opacity-60 text-xs">
+              <p style= opacity: 0.6, fontSize: 12 >
                 {detailEntity.status === "disconnected" ? "Neo4j 未连接" : "暂无相邻实体"}
               </p>
             ) : (
-              <ul className="space-y-1.5">
+              <ul style= listStyle: "none", padding: 0, margin: 0 >
                 {detailEntity.neighbors.map((n) => (
                   <li
                     key={n.name}
-                    className="flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer"
                     onClick={() => {
                       const target = filteredData.nodes.find((x) => x.id === n.name) as any;
                       if (target && fgRef.current && target.x !== undefined) {
@@ -272,9 +312,20 @@ export default function GraphPage() {
                         fgRef.current.zoom(2.4, 600);
                       }
                     }}
+                    style=
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      padding: "4px 8px",
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      marginBottom: 2,
+                    
                   >
-                    <span className="truncate">{n.name}</span>
-                    <span className="text-[10px] opacity-60 shrink-0">
+                    <span style= overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" >
+                      {n.name}
+                    </span>
+                    <span style= fontSize: 10, opacity: 0.6, flexShrink: 0 >
                       {n.type} · d{n.distance}
                     </span>
                   </li>
@@ -285,7 +336,7 @@ export default function GraphPage() {
         )}
 
         {filteredData.nodes.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center text-white/40 text-lg">
+          <div style={styles.emptyState}>
             {data.status === "disconnected" ? "Neo4j 未连接" : "加载图谱数据中..."}
           </div>
         ) : (
