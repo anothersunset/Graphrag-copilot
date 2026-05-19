@@ -139,6 +139,9 @@ export default function GraphPage() {
             nodeLabel={(n: any) => `${n.label}（${n.type} | 度数: ${n.degree}）`}
             nodeCanvasObjectMode={() => "after"}
             nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, scale: number) => {
+              // 初始化阶段坐标可能无效，跳过渲染
+              if (!isFinite(node.x) || !isFinite(node.y)) return;
+
               const r = Math.max(2, node.degree ?? 1) * 1.2;
               const highlighted = isHighlighted(node.id);
 
