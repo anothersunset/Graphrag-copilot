@@ -80,7 +80,7 @@ export default function GraphPage() {
       <div className="bg-white rounded-xl shadow p-6">
         <h3 className="font-semibold mb-4">实体搜索</h3>
         <div className="flex space-x-4">
-          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="输入实体名称搜索..." className="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" onKeyPress={(e) => e.key === "Enter" && handleSearch()} />
+          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="输入实体名称搜索..." className="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" onKeyDown={(e) => e.key === "Enter" && handleSearch()} />
           <button onClick={handleSearch} disabled={loading} className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition">
             {loading ? "搜索中..." : "搜索"}
           </button>
