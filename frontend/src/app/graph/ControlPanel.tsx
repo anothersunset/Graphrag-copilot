@@ -8,11 +8,13 @@ interface Props {
   onChange: (next: GraphSettings) => void;
   onReplay: () => void;
   onReset: () => void;
-  /** 节点类型→颜色映射，用于「颜色组」一节 */
   typeColor?: Record<string, string>;
 }
 
-// 布局关键属性一律用内联 style，避免 Tailwind 未生效时坍方
+//
+// === Styles ===
+// 所有 style 提取为顶部命名常量，避免双花括号内联在传输层被压缩 BUG 吃掉。
+//
 const PANEL_STYLE: CSSProperties = {
   position: "absolute",
   top: 0,
@@ -29,7 +31,7 @@ const PANEL_STYLE: CSSProperties = {
   fontSize: 13,
 };
 
-const TOGGLE_BUTTON_STYLE: CSSProperties = {
+const OPEN_BUTTON_STYLE: CSSProperties = {
   position: "absolute",
   top: 16,
   right: 16,
@@ -44,6 +46,167 @@ const TOGGLE_BUTTON_STYLE: CSSProperties = {
   backdropFilter: "blur(8px)",
 };
 
+const HEADER_STYLE: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 16,
+};
+
+const HEADER_TITLE_STYLE: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 600,
+  letterSpacing: "0.04em",
+  margin: 0,
+};
+
+const HEADER_ACTIONS_STYLE: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  fontSize: 12,
+};
+
+const LINK_BTN_STYLE: CSSProperties = {
+  background: "transparent",
+  border: 0,
+  color: "#fff",
+  opacity: 0.75,
+  cursor: "pointer",
+  fontSize: 12,
+  padding: 0,
+};
+
+const SECTION_STYLE: CSSProperties = {
+  marginBottom: 20,
+};
+
+const SECTION_TITLE_STYLE: CSSProperties = {
+  fontSize: 11,
+  textTransform: "uppercase",
+  letterSpacing: "0.15em",
+  opacity: 0.55,
+  margin: "0 0 10px 0",
+  fontWeight: 600,
+};
+
+const SECTION_BODY_STYLE: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+};
+
+const COLOR_LIST_STYLE: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const COLOR_ROW_STYLE: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  fontSize: 12,
+};
+
+const LABEL_STYLE: CSSProperties = {
+  opacity: 0.9,
+};
+
+const TOGGLE_LABEL_STYLE: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  cursor: "pointer",
+  userSelect: "none",
+  fontSize: 13,
+};
+
+const TOGGLE_TRACK_BASE: CSSProperties = {
+  position: "relative",
+  width: 36,
+  height: 20,
+  borderRadius: 999,
+  border: 0,
+  cursor: "pointer",
+  transition: "background-color .15s",
+  flexShrink: 0,
+};
+
+const TOGGLE_THUMB_BASE: CSSProperties = {
+  position: "absolute",
+  top: 2,
+  left: 2,
+  width: 16,
+  height: 16,
+  borderRadius: "50%",
+  background: "#fff",
+  transition: "transform .15s",
+};
+
+const SLIDER_WRAP_STYLE: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+};
+
+const SLIDER_HEAD_STYLE: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  fontSize: 12,
+  opacity: 0.9,
+};
+
+const SLIDER_VALUE_STYLE: CSSProperties = {
+  opacity: 0.6,
+  fontVariantNumeric: "tabular-nums",
+};
+
+const SLIDER_INPUT_STYLE: CSSProperties = {
+  width: "100%",
+  accentColor: "#7C5CFF",
+};
+
+const REPLAY_BTN_STYLE: CSSProperties = {
+  width: "100%",
+  padding: "8px 0",
+  marginTop: 8,
+  borderRadius: 6,
+  border: 0,
+  background: "rgba(124,92,255,0.9)",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: "pointer",
+};
+
+// 动态颜色点：辅助函数返回一个 CSSProperties，避免在 JSX 里写内联对象
+function dotStyle(color: string): CSSProperties {
+  return {
+    display: "inline-block",
+    width: 10,
+    height: 10,
+    borderRadius: "50%",
+    background: color,
+    boxShadow: "0 0 6px " + color + "66",
+    flexShrink: 0,
+  };
+}
+
+function toggleTrack(active: boolean): CSSProperties {
+  return Object.assign({}, TOGGLE_TRACK_BASE, {
+    background: active ? "#7C5CFF" : "rgba(255,255,255,0.18)",
+  });
+}
+
+function toggleThumb(active: boolean): CSSProperties {
+  return Object.assign({}, TOGGLE_THUMB_BASE, {
+    transform: active ? "translateX(16px)" : "translateX(0)",
+  });
+}
+
 export default function ControlPanel({
   value,
   onChange,
@@ -53,11 +216,11 @@ export default function ControlPanel({
 }: Props) {
   const [open, setOpen] = useState(true);
   const set = <K extends keyof GraphSettings>(k: K, v: GraphSettings[K]) =>
-    onChange({ ...value, [k]: v });
+    onChange(Object.assign({}, value, { [k]: v }));
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} style={TOGGLE_BUTTON_STYLE}>
+      <button onClick={() => setOpen(true)} style={OPEN_BUTTON_STYLE}>
         ⚙ 设置
       </button>
     );
@@ -65,22 +228,17 @@ export default function ControlPanel({
 
   return (
     <aside style={PANEL_STYLE}>
-      <header
-        style=
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 16,
-        
-      >
-        <h2 style= fontSize: 14, fontWeight: 600, letterSpacing: "0.04em", margin: 0 >
-          图谱设置
-        </h2>
-        <div style= display: "flex", alignItems: "center", gap: 12, fontSize: 12 >
-          <button onClick={onReset} style={linkBtnStyle}>
+      <header style={HEADER_STYLE}>
+        <h2 style={HEADER_TITLE_STYLE}>图谱设置</h2>
+        <div style={HEADER_ACTIONS_STYLE}>
+          <button onClick={onReset} style={LINK_BTN_STYLE}>
             重置
           </button>
-          <button onClick={() => setOpen(false)} style={linkBtnStyle} aria-label="收起设置">
+          <button
+            onClick={() => setOpen(false)}
+            style={LINK_BTN_STYLE}
+            aria-label="收起设置"
+          >
             ✕
           </button>
         </div>
@@ -98,24 +256,11 @@ export default function ControlPanel({
 
       {typeColor && Object.keys(typeColor).length > 0 && (
         <Section title="颜色组">
-          <div style= display: "flex", flexDirection: "column", gap: 6 >
+          <div style={COLOR_LIST_STYLE}>
             {Object.entries(typeColor).map(([type, color]) => (
-              <div
-                key={type}
-                style= display: "flex", alignItems: "center", gap: 8, fontSize: 12 
-              >
-                <span
-                  style=
-                    display: "inline-block",
-                    width: 10,
-                    height: 10,
-                    borderRadius: "50%",
-                    background: color,
-                    boxShadow: "0 0 6px " + color + "66",
-                    flexShrink: 0,
-                  
-                />
-                <span style= opacity: 0.9 >{type}</span>
+              <div key={type} style={COLOR_ROW_STYLE}>
+                <span style={dotStyle(color)} />
+                <span style={LABEL_STYLE}>{type}</span>
               </div>
             ))}
           </div>
@@ -148,21 +293,7 @@ export default function ControlPanel({
           v={value.linkWidth}
           on={(v) => set("linkWidth", v)}
         />
-        <button
-          onClick={onReplay}
-          style=
-            width: "100%",
-            padding: "8px 0",
-            marginTop: 8,
-            borderRadius: 6,
-            border: 0,
-            background: "rgba(124,92,255,0.9)",
-            color: "#fff",
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: "pointer",
-          
-        >
+        <button onClick={onReplay} style={REPLAY_BTN_STYLE}>
           ▶ 播放动画
         </button>
       </Section>
@@ -205,32 +336,11 @@ export default function ControlPanel({
   );
 }
 
-const linkBtnStyle: CSSProperties = {
-  background: "transparent",
-  border: 0,
-  color: "#fff",
-  opacity: 0.75,
-  cursor: "pointer",
-  fontSize: 12,
-  padding: 0,
-};
-
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section style= marginBottom: 20 >
-      <h3
-        style=
-          fontSize: 11,
-          textTransform: "uppercase",
-          letterSpacing: "0.15em",
-          opacity: 0.55,
-          margin: "0 0 10px 0",
-          fontWeight: 600,
-        
-      >
-        {title}
-      </h3>
-      <div style= display: "flex", flexDirection: "column", gap: 10 >{children}</div>
+    <section style={SECTION_STYLE}>
+      <h3 style={SECTION_TITLE_STYLE}>{title}</h3>
+      <div style={SECTION_BODY_STYLE}>{children}</div>
     </section>
   );
 }
@@ -245,47 +355,16 @@ function Toggle({
   on: (v: boolean) => void;
 }) {
   return (
-    <label
-      style=
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        cursor: "pointer",
-        userSelect: "none",
-        fontSize: 13,
-      
-    >
-      <span style= opacity: 0.9 >{label}</span>
+    <label style={TOGGLE_LABEL_STYLE}>
+      <span style={LABEL_STYLE}>{label}</span>
       <button
         type="button"
         role="switch"
         aria-checked={v}
         onClick={() => on(!v)}
-        style=
-          position: "relative",
-          width: 36,
-          height: 20,
-          borderRadius: 999,
-          border: 0,
-          cursor: "pointer",
-          transition: "background-color .15s",
-          background: v ? "#7C5CFF" : "rgba(255,255,255,0.18)",
-        
+        style={toggleTrack(v)}
       >
-        <span
-          style=
-            position: "absolute",
-            top: 2,
-            left: 2,
-            width: 16,
-            height: 16,
-            borderRadius: "50%",
-            background: "#fff",
-            transition: "transform .15s",
-            transform: v ? "translateX(16px)" : "translateX(0)",
-          
-        />
+        <span style={toggleThumb(v)} />
       </button>
     </label>
   );
@@ -307,18 +386,10 @@ function Slider({
   on: (v: number) => void;
 }) {
   return (
-    <div style= display: "flex", flexDirection: "column", gap: 4 >
-      <div
-        style=
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontSize: 12,
-          opacity: 0.9,
-        
-      >
+    <div style={SLIDER_WRAP_STYLE}>
+      <div style={SLIDER_HEAD_STYLE}>
         <span>{label}</span>
-        <span style= opacity: 0.6, fontVariantNumeric: "tabular-nums" >
+        <span style={SLIDER_VALUE_STYLE}>
           {step < 1 ? v.toFixed(2) : v.toFixed(0)}
         </span>
       </div>
@@ -329,7 +400,7 @@ function Slider({
         step={step}
         value={v}
         onChange={(e) => on(parseFloat(e.target.value))}
-        style= width: "100%", accentColor: "#7C5CFF" 
+        style={SLIDER_INPUT_STYLE}
       />
     </div>
   );

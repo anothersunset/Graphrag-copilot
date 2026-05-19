@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, CSSProperties } from "react";
 import ControlPanel from "./ControlPanel";
 import {
   GraphData,
@@ -25,59 +25,122 @@ export const TYPE_COLOR: Record<string, string> = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
-// 关键布局全部用内联 style，避免 Tailwind 未生效时坍方
-// （Notion 导出曾以丢失内联 style 的方式现过过 BUG，这里明确写全）
-const styles = {
-  canvasShell: {
-    position: "relative" as const,
-    width: "100%",
-    height: "calc(100vh - 160px)",
-    minHeight: 560,
-    background: "#0b0b0f",
-    borderRadius: 12,
-    overflow: "hidden",
-    boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-  },
-  searchBox: {
-    position: "absolute" as const,
-    top: 16,
-    left: 16,
-    zIndex: 10,
-    width: 240,
-    padding: "8px 12px",
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 8,
-    color: "#fff",
-    outline: "none",
-    backdropFilter: "blur(8px)",
-  },
-  emptyState: {
-    position: "absolute" as const,
-    inset: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "rgba(255,255,255,0.4)",
-    fontSize: 16,
-    pointerEvents: "none" as const,
-  },
-  detailPanel: {
-    position: "absolute" as const,
-    bottom: 16,
-    right: 304, // 避开右侧 ControlPanel
-    zIndex: 20,
-    width: 288,
-    maxHeight: "60%",
-    overflowY: "auto" as const,
-    padding: 16,
-    background: "rgba(0,0,0,0.55)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 8,
-    backdropFilter: "blur(12px)",
-    color: "#fff",
-    fontSize: 13,
-  },
+//
+// === Layout styles ===
+// 所有 inline style 都提取为顶部命名常量，JSX 只用 single-brace 引用。
+// 这是为了避开 Notion/消息传输层对 double-brace inline 对象的哎害压缩 BUG。
+//
+const SHELL_STYLE: CSSProperties = {
+  position: "relative",
+  width: "100%",
+  height: "calc(100vh - 160px)",
+  minHeight: 560,
+  background: "#0b0b0f",
+  borderRadius: 12,
+  overflow: "hidden",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+};
+
+const SEARCH_STYLE: CSSProperties = {
+  position: "absolute",
+  top: 16,
+  left: 16,
+  zIndex: 10,
+  width: 240,
+  padding: "8px 12px",
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 8,
+  color: "#fff",
+  outline: "none",
+  backdropFilter: "blur(8px)",
+};
+
+const EMPTY_STATE_STYLE: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "rgba(255,255,255,0.4)",
+  fontSize: 16,
+  pointerEvents: "none",
+};
+
+const DETAIL_PANEL_STYLE: CSSProperties = {
+  position: "absolute",
+  bottom: 16,
+  right: 304, // 避开右侧 ControlPanel
+  zIndex: 20,
+  width: 288,
+  maxHeight: "60%",
+  overflowY: "auto",
+  padding: 16,
+  background: "rgba(0,0,0,0.55)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 8,
+  backdropFilter: "blur(12px)",
+  color: "#fff",
+  fontSize: 13,
+};
+
+const DETAIL_HEADER_STYLE: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 8,
+};
+
+const DETAIL_TITLE_STYLE: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 600,
+  margin: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const DETAIL_CLOSE_STYLE: CSSProperties = {
+  opacity: 0.6,
+  background: "transparent",
+  border: 0,
+  color: "#fff",
+  cursor: "pointer",
+  fontSize: 14,
+};
+
+const DETAIL_HINT_STYLE: CSSProperties = {
+  opacity: 0.6,
+  fontSize: 12,
+  margin: 0,
+};
+
+const DETAIL_LIST_STYLE: CSSProperties = {
+  listStyle: "none",
+  padding: 0,
+  margin: 0,
+};
+
+const DETAIL_ITEM_STYLE: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 8,
+  padding: "4px 8px",
+  borderRadius: 4,
+  cursor: "pointer",
+  marginBottom: 2,
+};
+
+const DETAIL_ITEM_NAME_STYLE: CSSProperties = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const DETAIL_ITEM_META_STYLE: CSSProperties = {
+  fontSize: 10,
+  opacity: 0.6,
+  flexShrink: 0,
 };
 
 export default function GraphPage() {
@@ -94,7 +157,7 @@ export default function GraphPage() {
     if (typeof window === "undefined") return;
     try {
       const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-      if (raw) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
+      if (raw) setSettings(Object.assign({}, DEFAULT_SETTINGS, JSON.parse(raw)));
     } catch {
       /* ignore */
     }
@@ -262,14 +325,14 @@ export default function GraphPage() {
       </div>
 
       {/* 画布容器：内联 style 保证高度/背景/相对定位一定生效 */}
-      <div style={styles.canvasShell}>
+      <div style={SHELL_STYLE}>
         {/* 搜索框 */}
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索实体..."
-          style={styles.searchBox}
+          style={SEARCH_STYLE}
         />
 
         {/* 右侧设置面板（含颜色组 / 筛选 / 外观 / 力度） */}
@@ -283,25 +346,25 @@ export default function GraphPage() {
 
         {/* 实体详情面板 */}
         {detailEntity && (
-          <div style={styles.detailPanel}>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold truncate">{detailEntity.entity}</h3>
+          <div style={DETAIL_PANEL_STYLE}>
+            <div style={DETAIL_HEADER_STYLE}>
+              <h3 style={DETAIL_TITLE_STYLE}>{detailEntity.entity}</h3>
               <button
                 onClick={() => setDetailEntity(null)}
-                style= opacity: 0.6, background: "transparent", border: 0, color: "#fff", cursor: "pointer" 
+                style={DETAIL_CLOSE_STYLE}
                 aria-label="关闭"
               >
                 ✕
               </button>
             </div>
             {detailLoading ? (
-              <p style= opacity: 0.6, fontSize: 12 >加载中...</p>
+              <p style={DETAIL_HINT_STYLE}>加载中...</p>
             ) : detailEntity.neighbors.length === 0 ? (
-              <p style= opacity: 0.6, fontSize: 12 >
+              <p style={DETAIL_HINT_STYLE}>
                 {detailEntity.status === "disconnected" ? "Neo4j 未连接" : "暂无相邻实体"}
               </p>
             ) : (
-              <ul style= listStyle: "none", padding: 0, margin: 0 >
+              <ul style={DETAIL_LIST_STYLE}>
                 {detailEntity.neighbors.map((n) => (
                   <li
                     key={n.name}
@@ -312,20 +375,10 @@ export default function GraphPage() {
                         fgRef.current.zoom(2.4, 600);
                       }
                     }}
-                    style=
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 8,
-                      padding: "4px 8px",
-                      borderRadius: 4,
-                      cursor: "pointer",
-                      marginBottom: 2,
-                    
+                    style={DETAIL_ITEM_STYLE}
                   >
-                    <span style= overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" >
-                      {n.name}
-                    </span>
-                    <span style= fontSize: 10, opacity: 0.6, flexShrink: 0 >
+                    <span style={DETAIL_ITEM_NAME_STYLE}>{n.name}</span>
+                    <span style={DETAIL_ITEM_META_STYLE}>
                       {n.type} · d{n.distance}
                     </span>
                   </li>
@@ -336,7 +389,7 @@ export default function GraphPage() {
         )}
 
         {filteredData.nodes.length === 0 ? (
-          <div style={styles.emptyState}>
+          <div style={EMPTY_STATE_STYLE}>
             {data.status === "disconnected" ? "Neo4j 未连接" : "加载图谱数据中..."}
           </div>
         ) : (
