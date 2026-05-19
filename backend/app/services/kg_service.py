@@ -188,7 +188,13 @@ class KnowledgeGraphService:
         }
 
     def get_all_graph(self, limit: int = 500, entity_type: str = "all") -> Dict[str, Any]:
-        """返回所有节点和关系，用于前端力导向图可视化"""
+        """返回所有节点和关系，用于前端力导向图可视化
+
+        每个节点附带 source 字段供前端跳转：
+          - 实体含 source_url 属性 → {kind: 'url', url}
+          - 实体含 doc_id 属性 → {kind: 'doc', doc_id}
+          - 否则回退 → {kind: 'neo4j', entity: name}（前端打开邻居详情面板）
+        """
         if not self.driver:
             return {"nodes": [], "links": [], "status": "disconnected"}
 
@@ -198,12 +204,13 @@ class KnowledgeGraphService:
             type_clause = ":" + entity_type
 
         with self.driver.session() as session:
-            # 获取节点及其度数
+            # 获取节点及其度数（同时取 source_url / doc_id 作为可选跳转目标）
             nodes_query = (
                 "MATCH (n" + type_clause + ") "
                 "OPTIONAL MATCH (n)-[r]-() "
                 "RETURN n.name as id, labels(n)[0] as type, n.name as label, "
-                "count(r) as degree, n.confidence as confidence "
+                "count(r) as degree, n.confidence as confidence, "
+                "n.source_url as source_url, n.doc_id as doc_id "
                 "ORDER BY degree DESC "
                 "LIMIT $limit"
             )
@@ -212,15 +219,26 @@ class KnowledgeGraphService:
             node_ids = set()
             for record in nodes_result:
                 nid = record["id"]
-                if nid:
-                    nodes.append({
-                        "id": nid,
-                        "label": record["label"] or nid,
-                        "type": record["type"] or "Entity",
-                        "degree": record["degree"],
-                        "confidence": float(record["confidence"] or 0.0),
-                    })
-                    node_ids.add(nid)
+                if not nid:
+                    continue
+                source_url = record["source_url"]
+                doc_id = record["doc_id"]
+                if source_url:
+                    source = {"kind": "url", "url": source_url}
+                elif doc_id:
+                    source = {"kind": "doc", "doc_id": doc_id}
+                else:
+                    source = {"kind": "neo4j", "entity": nid}
+                nodes.append({
+                    "id": nid,
+                    "label": record["label"] or nid,
+                    "type": record["type"] or "Entity",
+                    "degree": record["degree"],
+                    "confidence": float(record["confidence"] or 0.0),
+                    "exists": True,
+                    "source": source,
+                })
+                node_ids.add(nid)
 
             # 获取节点之间的关系
             if node_ids:
