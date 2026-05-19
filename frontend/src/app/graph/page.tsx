@@ -273,7 +273,14 @@ export default function GraphPage() {
       );
       if (resp.ok) {
         const json = (await resp.json()) as EntityNeighborsResponse;
-        setDetailEntity(json);
+        // 去重：同名实体保留最短距离
+        const seen = new Map<string, typeof json.neighbors[0]>();
+        for (const n of json.neighbors) {
+          if (!seen.has(n.name) || seen.get(n.name)!.distance > n.distance) {
+            seen.set(n.name, n);
+          }
+        }
+        setDetailEntity({ ...json, neighbors: [...seen.values()] });
       }
     } catch (e) {
       console.error("加载实体邻居失败:", e);
