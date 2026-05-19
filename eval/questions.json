@@ -1,0 +1,7 @@
+[
+  {"id": "q1", "type": "fact", "question": "GraphRAG Copilot 由哪些核心服务组成？", "expected_keywords": ["文档解析", "FAISS", "BM25", "Neo4j", "Multi-Agent"]},
+  {"id": "q2", "type": "comparison", "question": "普通 RAG 和 GraphRAG 的区别是什么？", "expected_keywords": ["向量检索", "知识图谱", "多跳", "可解释"]},
+  {"id": "q3", "type": "multi_hop", "question": "为什么系统需要同时使用向量检索、BM25 和知识图谱？", "expected_keywords": ["语义相似", "关键词", "实体关系", "证据融合"]},
+  {"id": "q4", "type": "fallback", "question": "Neo4j 不可用时系统如何降级？", "expected_keywords": ["disconnected", "FAISS", "BM25", "不崩溃"]},
+  {"id": "q5", "type": "hallucination", "question": "系统如何降低大模型幻觉？", "expected_keywords": ["来源", "VerificationAgent", "置信度", "证据不足"]}
+]

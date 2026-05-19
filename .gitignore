@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data
+backend/data/raw/*
+backend/data/processed/*
+backend/data/vector_db/*
+backend/data/graph_db/*
+!backend/data/raw/.gitkeep
+!backend/data/processed/.gitkeep
+!backend/data/vector_db/.gitkeep
+!backend/data/graph_db/.gitkeep
+
+# Env
+.env
+.env.local
+backend/.env
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+build/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
