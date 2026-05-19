@@ -26,7 +26,7 @@ export default function Home() {
           <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition">
             <div className="text-4xl mb-4">🤖</div>
             <h3 className="text-lg font-semibold mb-2">Multi-Agent</h3>
-            <p className="text-gray-600 text-sm">问题理解 -> 检索规划 -> 推理生成 -> 事实校验，多智能体协作</p>
+            <p className="text-gray-600 text-sm">问题理解 {'->'} 检索规划 {'->'} 推理生成 {'->'} 事实校验，多智能体协作</p>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition">
             <div className="text-4xl mb-4">✅</div>
