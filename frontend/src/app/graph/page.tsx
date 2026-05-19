@@ -208,7 +208,7 @@ export default function GraphPage() {
 
       <div
         className="relative rounded-xl overflow-hidden border border-gray-200 shadow-lg"
-        style= height: "calc(100vh - 220px)", background: "#0b0b0f" 
+        style={{ height: "calc(100vh - 220px)", background: "#0b0b0f" }}
       >
         {/* 搜索框 */}
         <input
@@ -225,7 +225,7 @@ export default function GraphPage() {
             <div key={type} className="flex items-center gap-2">
               <span
                 className="inline-block w-2.5 h-2.5 rounded-full"
-                style= background: color 
+                style={{ background: color }}
               />
               {type}
             </div>
