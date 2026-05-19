@@ -187,4 +187,62 @@ class KnowledgeGraphService:
             "node_types": types,
         }
 
+    def get_all_graph(self, limit: int = 500, entity_type: str = "all") -> Dict[str, Any]:
+        """返回所有节点和关系，用于前端力导向图可视化"""
+        if not self.driver:
+            return {"nodes": [], "links": [], "status": "disconnected"}
+
+        limit = max(1, min(limit, 2000))
+        type_clause = ""
+        if entity_type != "all" and entity_type in ALLOWED_ENTITY_TYPES:
+            type_clause = ":" + entity_type
+
+        with self.driver.session() as session:
+            # 获取节点及其度数
+            nodes_query = (
+                "MATCH (n" + type_clause + ") "
+                "OPTIONAL MATCH (n)-[r]-() "
+                "RETURN n.name as id, labels(n)[0] as type, n.name as label, "
+                "count(r) as degree, n.confidence as confidence "
+                "ORDER BY degree DESC "
+                "LIMIT $limit"
+            )
+            nodes_result = session.run(nodes_query, limit=limit)
+            nodes = []
+            node_ids = set()
+            for record in nodes_result:
+                nid = record["id"]
+                if nid:
+                    nodes.append({
+                        "id": nid,
+                        "label": record["label"] or nid,
+                        "type": record["type"] or "Entity",
+                        "degree": record["degree"],
+                        "confidence": float(record["confidence"] or 0.0),
+                    })
+                    node_ids.add(nid)
+
+            # 获取节点之间的关系
+            if node_ids:
+                links_query = (
+                    "MATCH (a)-[r]->(b) "
+                    "WHERE a.name IN $names AND b.name IN $names "
+                    "RETURN a.name as source, b.name as target, type(r) as relation"
+                )
+                links_result = session.run(links_query, names=list(node_ids))
+                links = [
+                    {
+                        "source": record["source"],
+                        "target": record["target"],
+                        "relation": record["relation"],
+                        "weight": 0.5,
+                    }
+                    for record in links_result
+                ]
+            else:
+                links = []
+
+        return {"nodes": nodes, "links": links, "status": "connected"}
+
+
 kg_service = KnowledgeGraphService()

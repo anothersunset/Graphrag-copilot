@@ -167,6 +167,11 @@ async def find_entity_paths(source: str, target: str, max_depth: int = 3):
 async def get_vector_stats():
     return vector_store.get_stats()
 
+@router.get("/graph")
+async def get_full_graph(limit: int = 500, type: str = "all"):
+    """返回全量图谱数据（节点+关系），供前端力导向图使用"""
+    return kg_service.get_all_graph(limit=limit, entity_type=type)
+
 @router.get("/system/status")
 async def get_system_status():
     return {
