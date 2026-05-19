@@ -1,5 +1,18 @@
 # GraphRAG Copilot
 
+<div align="center">
+
+[![GitHub stars](https://img.shields.io/github/stars/qsm68p75m6-arch/Graphrag-copilot?style=flat-square)](https://github.com/qsm68p75m6-arch/Graphrag-copilot/stargazers)
+[![GitHub license](https://img.shields.io/github/license/qsm68p75m6-arch/Graphrag-copilot?style=flat-square)](https://github.com/qsm68p75m6-arch/Graphrag-copilot/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11+-blue?style=flat-square&logo=python)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
+[![CI](https://img.shields.io/github/actions/workflow/status/qsm68p75m6-arch/Graphrag-copilot/ci.yml?style=flat-square&label=CI)](https://github.com/qsm68p75m6-arch/Graphrag-copilot/actions)
+[![Release](https://img.shields.io/github/v/release/qsm68p75m6-arch/Graphrag-copilot?style=flat-square)](https://github.com/qsm68p75m6-arch/Graphrag-copilot/releases)
+
+</div>
+
 > 面向企业知识库的多模态 GraphRAG + Multi-Agent 检索增强生成系统
 
 ## 核心特性
