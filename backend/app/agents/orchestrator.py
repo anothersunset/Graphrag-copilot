@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Generator
 from dataclasses import dataclass
 from enum import Enum
 
@@ -200,4 +200,102 @@ class MultiAgentOrchestrator:
             },
         }
 
+class StreamingReasoningAgent:
+    """流式推理 Agent - 逐 token 输出答案"""
+
+    def reason_stream(self, query: str, context: List[Dict[str, Any]], analysis: Dict[str, Any]) -> Generator[str, None, None]:
+        context_text = "\n\n".join([
+            "[" + str(i + 1) + "] 类型: " + str(c.get("type")) + "; 来源: " + str(c.get("source")) + "; 分数: " + str(c.get("fusion_score", c.get("score", 0))) + "\n" + str(c.get("content", ""))
+            for i, c in enumerate(context[:10])
+        ])
+
+        if not context_text.strip():
+            yield "当前知识库中没有找到足够信息来回答这个问题。"
+            return
+
+        system_prompt = (
+            "你是一个严谨的企业知识问答助手。必须基于给定上下文回答问题。\n"
+            "要求:\n"
+            "1. 只基于上下文回答，不允许编造。\n"
+            "2. 每个关键结论尽量标注来源编号（如[1]）。\n"
+            "3. 如果证据不足，明确说明不足。\n"
+            "4. 用简洁清晰的中文回答。"
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "问题: " + query + "\n\n问题分析: " + str(analysis) + "\n\n上下文:\n" + context_text},
+        ]
+
+        yield from llm_service.chat_stream(messages)
+
+
+class StreamingOrchestrator:
+    """流式编排器 - 前置步骤同步，LLM 生成流式输出"""
+
+    def __init__(self):
+        self.query_agent = QueryUnderstandingAgent()
+        self.retrieval_agent = RetrievalAgent()
+        self.streaming_reasoner = StreamingReasoningAgent()
+        self.verification_agent = VerificationAgent()
+
+    def process_query_stream(self, query: str, top_k: int = 10) -> Generator[Dict[str, Any], None, None]:
+        # Phase 1: 问题理解
+        analysis = self.query_agent.analyze(query)
+        yield {"type": "phase", "phase": "analysis", "data": analysis}
+
+        # Phase 2: 混合检索
+        retrieval_results = self.retrieval_agent.hybrid_search(
+            query=analysis.get("query_rewrite", query),
+            entities=analysis.get("entities", []),
+            top_k=top_k,
+        )
+        yield {
+            "type": "phase",
+            "phase": "retrieval",
+            "data": {
+                "vector_count": len(retrieval_results.get("vector_results", [])),
+                "bm25_count": len(retrieval_results.get("bm25_results", [])),
+                "graph_count": len(retrieval_results.get("graph_results", {}).get("entities", []) if isinstance(retrieval_results.get("graph_results"), dict) else 0),
+                "warnings": retrieval_results.get("warnings", []),
+            },
+        }
+
+        context = retrieval_results.get("combined_context", [])
+
+        # Phase 3: 流式推理（token by token）
+        yield {"type": "answer_start"}
+        answer_buffer = []
+        for token in self.streaming_reasoner.reason_stream(
+            query=query,
+            context=context,
+            analysis=analysis,
+        ):
+            answer_buffer.append(token)
+            yield {"type": "token", "text": token}
+        yield {"type": "answer_end"}
+
+        full_answer = "".join(answer_buffer)
+
+        # Phase 4: 校验
+        verification_result = self.verification_agent.verify(
+            query=query,
+            answer=full_answer,
+            sources=context,
+        )
+
+        sources = [{"content": c.get("content", "")[:200], "source": c.get("source", ""), "type": c.get("type", "")} for c in context[:5]]
+        confidence = float(verification_result.get("confidence", 0.0) or 0.0)
+
+        yield {
+            "type": "done",
+            "data": {
+                "sources": sources,
+                "confidence": confidence,
+                "verification": verification_result,
+                "analysis": analysis,
+            },
+        }
+
+
 orchestrator = MultiAgentOrchestrator()
+stream_orchestrator = StreamingOrchestrator()

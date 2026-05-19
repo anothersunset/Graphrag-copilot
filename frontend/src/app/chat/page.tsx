@@ -8,6 +8,7 @@ interface Message {
   content: string;
   sources?: Array<{ content: string; source: string }>;
   timestamp: Date;
+  isStreaming?: boolean;
 }
 
 export default function ChatPage() {
@@ -32,38 +33,100 @@ export default function ChatPage() {
       content: input,
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, userMessage]);
+    const assistantId = (Date.now() + 1).toString();
+    setMessages((prev) => [
+      ...prev,
+      userMessage,
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        timestamp: new Date(),
+        isStreaming: true,
+      },
+    ]);
     setInput("");
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/api/query", {
+      const response = await fetch("http://localhost:8000/api/query/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: input, top_k: 5 }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: data.answer,
-          sources: data.sources,
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-      } else {
+      if (!response.ok || !response.body) {
         throw new Error("请求失败");
       }
-    } catch (error) {
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "抱歉，服务暂时不可用。请确保后端服务已启动。",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === "token") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: m.content + event.text }
+                    : m
+                )
+              );
+            } else if (event.type === "done") {
+              const data = event.data || {};
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        sources: data.sources || [],
+                        isStreaming: false,
+                      }
+                    : m
+                )
+              );
+            } else if (event.type === "error") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content: m.content || "抱歉，生成过程中出现错误。",
+                        isStreaming: false,
+                      }
+                    : m
+                )
+              );
+            }
+          } catch {
+            // skip malformed lines
+          }
+        }
+      }
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                content: m.content || "抱歉，服务暂时不可用。请确保后端服务已启动。",
+                isStreaming: false,
+              }
+            : m
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -96,7 +159,10 @@ export default function ChatPage() {
           messages.map((msg) => (
             <div key={msg.id} className={"flex " + (msg.role === "user" ? "justify-end" : "justify-start")}>
               <div className={"max-w-[70%] rounded-lg p-4 " + (msg.role === "user" ? "bg-purple-600 text-white" : "bg-white shadow")}>
-                <div className="whitespace-pre-wrap">{msg.content}</div>
+                <div className="whitespace-pre-wrap">
+                  {msg.content}
+                  {msg.isStreaming && <span className="inline-block w-2 h-4 bg-purple-600 ml-0.5 animate-pulse align-middle" />}
+                </div>
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
                     <p className="text-xs text-gray-500 mb-1">参考来源:</p>

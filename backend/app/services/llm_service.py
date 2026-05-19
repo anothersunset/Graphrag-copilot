@@ -1,9 +1,15 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Generator
 from openai import OpenAI
 from config.settings import settings
 from app.utils.json_utils import extract_json_object
 import os
 import traceback
+from dotenv import load_dotenv
+from pathlib import Path
+
+# 确保 .env 被加载（显式指定路径）
+_env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(_env_path)
 
 class LLMService:
     def __init__(self):
@@ -43,6 +49,25 @@ class LLMService:
             print("LLM 调用失败:", e)
             traceback.print_exc()
             raise
+
+    def chat_stream(self, messages: List[Dict[str, str]], **kwargs) -> Generator[str, None, None]:
+        """流式调用 LLM，逐 token yield"""
+        try:
+            response = self.client.chat.completions.create(
+                model=kwargs.get("model", self.model),
+                messages=messages,
+                temperature=kwargs.get("temperature", self.temperature),
+                max_tokens=kwargs.get("max_tokens", self.max_tokens),
+                stream=True,
+            )
+            for chunk in response:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    yield delta.content
+        except Exception as e:
+            print("LLM 流式调用失败:", e)
+            traceback.print_exc()
+            yield "\n\n[生成中断: " + str(e) + "]"
 
     def chat_json(self, messages: List[Dict[str, str]], **kwargs) -> Dict[str, Any]:
         response = self.chat(messages, **kwargs)

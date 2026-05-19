@@ -1,6 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 
 from app.api.schemas import (
     QueryRequest,
@@ -15,7 +16,7 @@ from app.services.bm25_store import bm25_store
 from app.services.kg_service import kg_service
 from app.services.document_parser import doc_parser
 from app.services.llm_service import llm_service
-from app.agents.orchestrator import orchestrator
+from app.agents.orchestrator import orchestrator, stream_orchestrator
 from config.settings import settings
 
 router = APIRouter()
@@ -25,8 +26,19 @@ def validate_upload_file(file: UploadFile):
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Unsupported file type: " + suffix)
 
+def _extract_entities_background(file_name: str, full_text: str):
+    """后台执行实体抽取与知识图谱导入"""
+    try:
+        extraction = llm_service.extract_entities(full_text[:3000])
+        entities = extraction.get("entities", [])
+        relations = extraction.get("relations", [])
+        stats = kg_service.ingest_knowledge(entities, relations)
+        print(f"[BG] {file_name}: {stats.get('entities_created', 0)} entities, {stats.get('relations_created', 0)} relations")
+    except Exception as e:
+        print(f"[BG] Entity extraction failed for {file_name}: {e}")
+
 @router.post("/documents/upload", response_model=DocumentResponse)
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
     validate_upload_file(file)
 
     content = await file.read()
@@ -74,26 +86,16 @@ async def upload_document(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail="Indexing failed: " + str(e))
 
-    entities_count = 0
-    relations_count = 0
-
-    try:
-        extraction = llm_service.extract_entities(full_text[:3000])
-        entities = extraction.get("entities", [])
-        relations = extraction.get("relations", [])
-        stats = kg_service.ingest_knowledge(entities, relations)
-        entities_count = stats.get("entities_created", 0)
-        relations_count = stats.get("relations_created", 0)
-    except Exception as e:
-        print("Entity extraction degraded:", e)
+    # 实体抽取改为后台执行，不阻塞上传响应
+    background_tasks.add_task(_extract_entities_background, file.filename, full_text)
 
     return DocumentResponse(
         file_name=file.filename,
         file_type=doc_result.get("file_type", suffix),
         content_length=len(full_text),
         chunks_created=len(chunks),
-        entities_extracted=entities_count,
-        relations_extracted=relations_count,
+        entities_extracted=0,  # 后台异步处理，响应中返回 0
+        relations_extracted=0,
         document_hash=doc_result.get("file_hash"),
     )
 
@@ -112,6 +114,29 @@ async def query_knowledge(request: QueryRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Query failed: " + str(e))
+
+@router.post("/query/stream")
+async def query_knowledge_stream(request: QueryRequest):
+    """流式问答 SSE 端点 - 逐 token 返回"""
+    import json
+
+    def event_stream():
+        try:
+            for event in stream_orchestrator.process_query_stream(request.query, top_k=request.top_k):
+                event_type = event.get("type", "message")
+                yield f"event: {event_type}\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+        except Exception as e:
+            yield f"event: error\ndata: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 @router.post("/vector/search")
 async def search_vector(request: VectorSearchRequest):
