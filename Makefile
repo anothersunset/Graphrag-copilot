@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint fmt typecheck clean api web docker-build
+.PHONY: help install dev test lint fmt typecheck clean api web docker-build ci-activate
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN {FS=":.*?##"} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -34,6 +34,9 @@ typecheck:  ## Run pyright + tsc
 
 docker-build:  ## Build api + web Docker images
 	docker compose build
+
+ci-activate:  ## Render workflow templates into .github/workflows/ (run once after clone)
+	bash scripts/install-workflows.sh
 
 clean:  ## Remove caches
 	rm -rf .pytest_cache .ruff_cache .coverage coverage.xml htmlcov

@@ -58,6 +58,36 @@ docker-compose up -d
 
 ```
 
+## v3.1 骨架开发者快速上手
+
+v3.1 重构骨架在 `apps/` + `packages/` + `infra/` 下，与 v1 代码并存。初次 clone 后，贡献者运行一次：
+
+```bash
+make install        # uv sync --all-packages --dev && cd apps/web && pnpm install
+make ci-activate    # render infra/workflows-template/*.tmpl → .github/workflows/
+git add .github/workflows/
+git commit -m "ci: activate workflows from templates"
+git push
+```
+
+为什么 `ci-activate` 要手动跑？本仓的 CI workflow YAML 以模板形式存放在 `infra/workflows-template/*.yml.tmpl`。原因在 [`infra/workflows-template/README.md`](infra/workflows-template/README.md) 里详述，一句话：
+- AI 代理集成的 GitHub App **未声明 `workflows:write` scope**，无法直接写 `.github/workflows/*`；
+- 代理的工具调用序列化层会 **吾掉双花括号表达式**（如 `$ 166`）。
+
+模板使用 `__GHA_OPEN__/__GHA_CLOSE__` sentinel 避开这两个问题；`make ci-activate` 用 sed 还原为真正的 GHA 表达式。之后贡献者只需编辑 `.tmpl` 文件，重跑 `make ci-activate`。
+
+其他常用命令（`make help` 查看全部）：
+
+```bash
+make api            # 启动 FastAPI dev server (:8000)
+make web            # 启动 Next.js dev server (:3000)
+make dev            # 同时启动 api + web
+make test           # 跑 pytest 带覆盖率
+make lint           # ruff + biome
+make fmt            # 格式化 (ruff format + biome format)
+make typecheck      # pyright + tsc
+```
+
 ## 测试
 项目同时维护三类测试：**单元测试**（pytest，不依赖外部服务）、**冷烟脚本**（test_api.py，针对已启动服务走一遭关键接口）、**评测脚本**（eval/run_eval.py，度量问答质量）。
 
