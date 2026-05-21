@@ -1,86 +1,97 @@
-"""Four pure-Python custom Agentic-RAG metrics.
+"""Custom GraphRAG-Copilot evaluation metrics.
 
-All inputs are plain dicts so this module has zero hard dependency on
-graphrag_graph or graphrag_observability. The graph package emits these
-shapes; the observability package exports them; this package scores them.
+Four built-in metrics from v3.1:
+  - trace_completeness(run): every required node fired (planner,
+    retriever, evaluator, auditor, generator|fallback).
+  - tool_call_necessity(run): ∥tool calls∥ / ∥unique evidence∥ ∈ [0.9, 1.1].
+  - audit_coverage(audit_entries): one audit per node.
+  - crag_fix_rate(runs): fraction of pre-rewrite low-coverage runs that
+    post-rewrite cleared the use threshold.
+
+v3.2 adds:
+  - provenance_sufficiency_score(...): scalar in [0,1]; re-export of
+    provenance.provenance_sufficiency for ergonomics.
 """
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from collections import Counter
+from typing import Iterable, Mapping, Sequence
 
-EXPECTED_NODES = (
-    "planner",
-    "retriever",
-    "evaluator",
-    "generator",  # OR "fallback" in the bad branch — see trace_completeness
-    "auditor",
-)
+from .provenance import ProvenanceReport, provenance_sufficiency
+
+_REQUIRED_NODES = ("planner", "retriever", "evaluator", "auditor")
 
 
-def trace_completeness(audit: Sequence[dict], *, expected: Iterable[str] = EXPECTED_NODES) -> float:
-    """Fraction of expected node spans that actually appear in the audit log.
-
-    The auditor is treated as required for a complete run; if the run took
-    the fallback branch, generator may be substituted by fallback.
-    """
-    seen = {entry.get("node") for entry in audit}
-    required = set(expected)
-    # generator / fallback are interchangeable for completeness
-    if "generator" in required and "fallback" in seen and "generator" not in seen:
-        required = (required - {"generator"}) | {"fallback"}
-    if not required:
-        return 1.0
-    return len(required & seen) / len(required)
-
-
-def tool_call_necessity(tool_calls: Sequence[dict], audit: Sequence[dict]) -> float:
-    """Ratio of cited tool calls to emitted tool calls.
-
-    A tool call is "cited" if its tool name appears in any audit entry's
-    ``detail.cited_tools`` list. Target band [0.9, 1.1] catches both
-    over-calling (low ratio) and pre-cited but unused tools (>1).
-    """
-    if not tool_calls:
-        return 1.0
-    cited: set[str] = set()
-    for entry in audit:
-        for name in (entry.get("detail") or {}).get("cited_tools", []):
-            cited.add(name)
-    emitted = {tc.get("name") for tc in tool_calls if tc.get("name")}
-    if not emitted:
-        return 1.0
-    return len(cited & emitted) / len(emitted)
-
-
-def audit_coverage(audit: Sequence[dict], decisions: Sequence[dict]) -> float:
-    """Fraction of agent decisions that have a matching AuditEntry.
-
-    Each decision in ``decisions`` should expose ``node`` (str). The
-    metric returns 1.0 when every decision has at least one corresponding
-    audit entry with the same node name.
-    """
-    if not decisions:
-        return 1.0
-    nodes_with_audit = {e.get("node") for e in audit}
-    covered = sum(1 for d in decisions if d.get("node") in nodes_with_audit)
-    return covered / len(decisions)
-
-
-def crag_fix_rate(runs: Sequence[dict]) -> float:
-    """Fraction of runs that entered rewrite at least once and ended in 'use'.
-
-    A run dict shape:
-      {
-        "rewrite_iterations": int,        # number of rewrite loops
-        "final_decision": "use" | "fallback",
-      }
-
-    Denominator: runs with rewrite_iterations >= 1.
-    Numerator: subset of those that ended with final_decision == 'use'.
-    Returns 0.0 if no runs needed rewriting.
-    """
-    needed_fix = [r for r in runs if int(r.get("rewrite_iterations", 0)) >= 1]
-    if not needed_fix:
+def trace_completeness(run: Mapping) -> float:
+    audit = run.get("audit") or []
+    fired = {a.get("node") for a in audit if isinstance(a, Mapping) or hasattr(a, "get")}
+    if not all(node in fired for node in _REQUIRED_NODES):
         return 0.0
-    fixed = sum(1 for r in needed_fix if r.get("final_decision") == "use")
-    return fixed / len(needed_fix)
+    if not ({"generator", "fallback"} & fired):
+        return 0.0
+    return 1.0
+
+
+def tool_call_necessity(run: Mapping) -> float:
+    tool_calls = run.get("tool_calls") or []
+    evidence = run.get("cited_chunk_ids") or run.get("fused_hits") or []
+    unique_evidence = {
+        e if isinstance(e, str) else (e.get("chunk_id") if hasattr(e, "get") else str(e))
+        for e in evidence
+    }
+    if not unique_evidence:
+        return 0.0
+    return round(len(tool_calls) / len(unique_evidence), 4)
+
+
+def audit_coverage(audit_entries: Sequence, *, required_nodes: Sequence[str] = _REQUIRED_NODES) -> float:
+    fired = Counter()
+    for entry in audit_entries:
+        node = entry.get("node") if isinstance(entry, Mapping) else getattr(entry, "node", None)
+        if node:
+            fired[node] += 1
+    if not required_nodes:
+        return 1.0
+    hit = sum(1 for n in required_nodes if fired[n] >= 1)
+    return round(hit / len(required_nodes), 4)
+
+
+def crag_fix_rate(runs: Iterable[Mapping]) -> float:
+    pre_low = 0
+    fixed = 0
+    for r in runs:
+        if (r.get("pre_rewrite_decision") or "").lower() == "rewrite":
+            pre_low += 1
+            if (r.get("post_rewrite_decision") or "").lower() == "use":
+                fixed += 1
+    if pre_low == 0:
+        return 0.0
+    return round(fixed / pre_low, 4)
+
+
+def provenance_sufficiency_score(
+    *,
+    answer: str,
+    claims: Iterable[dict],
+    cited_chunk_ids: Iterable[str],
+    chunk_contents: dict[str, str],
+    **kwargs,
+) -> float:
+    """Ergonomic wrapper — returns just the scalar score."""
+    report: ProvenanceReport = provenance_sufficiency(
+        answer=answer,
+        claims=claims,
+        cited_chunk_ids=cited_chunk_ids,
+        chunk_contents=chunk_contents,
+        **kwargs,
+    )
+    return report.score
+
+
+__all__ = [
+    "trace_completeness",
+    "tool_call_necessity",
+    "audit_coverage",
+    "crag_fix_rate",
+    "provenance_sufficiency_score",
+]
