@@ -1,0 +1,34 @@
+name: 🐛 Bug report
+description: Report a defect
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened? What did you expect?
+    validations:
+      required: true
+  - type: input
+    id: trace_id
+    attributes:
+      label: Langfuse trace ID (if available)
+      placeholder: e.g. abc123-def456
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      value: |
+        - OS:
+        - Python:
+        - Node:
+        - Commit SHA:
+    validations:
+      required: true

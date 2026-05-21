@@ -1,0 +1,80 @@
+# graphrag-copilot · workspace root
+# Managed by uv (https://docs.astral.sh/uv/). See docs/adr/0002-monorepo-container.md.
+
+[project]
+name = "graphrag-copilot"
+version = "0.1.0"
+description = "Agentic GraphRAG copilot: 7-node LangGraph + 4-way hybrid retrieval + CRAG fallback + full trace"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "lee fanwei" }]
+
+[tool.uv.workspace]
+members = ["apps/api", "packages/*"]
+
+[tool.uv.sources]
+graphrag-api          = { workspace = true }
+graphrag-schemas      = { workspace = true }
+graphrag-retriever    = { workspace = true }
+graphrag-reranker     = { workspace = true }
+graphrag-kg           = { workspace = true }
+graphrag-graph        = { workspace = true }
+graphrag-observability = { workspace = true }
+graphrag-evals        = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "ruff>=0.7",
+  "pyright>=1.1.380",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "pytest-cov>=5.0",
+  "httpx>=0.27",
+]
+
+# ──────────────────────────────── Ruff ────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["backend", "frontend", "eval", "demo_docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "PLR2004"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ──────────────────────────────── Pyright ────────────────────────────
+[tool.pyright]
+include = ["apps", "packages"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.venv", "backend", "frontend", "eval"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"  # W7 tightens to "strict" — see migration-roadmap.md
+reportMissingImports = "warning"
+reportMissingTypeStubs = "none"
+
+# ──────────────────────────────── Pytest ─────────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["apps", "packages"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers --color=yes"
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "integration: requires external services (Qdrant/Neo4j)",
+]
+
+[tool.coverage.run]
+source = ["apps", "packages"]
+branch = true
+omit = ["*/tests/*", "*/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 0  # W5 raises to 70 after baseline
