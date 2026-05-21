@@ -22,6 +22,7 @@
 - 可解释 & 抗幻觉：附带来源引用、置信度、推理路径
 - 优雅降级：Neo4j / LLM / Embedding 单点故障不会拖垮系统
 - 工程化完备：Docker Compose、pytest、eval 脚本、前端演示闭环
+- 安全与可观测：可选 API Key 鉴权、统一 loguru 日志、限流中间件
 
 ## 技术栈
 - 后端：Python 3.11+ / FastAPI 0.115 / Uvicorn
@@ -66,6 +67,40 @@ python eval/run_eval.py
 
 ## API
 启动后访问 http://localhost:8000/docs 。
+
+## 安全配置
+GraphRAG Copilot 默认允许本地匿名访问，便于快速试用；在生产、公网或多租户环境中请启用鉴权与限流。
+- `ENABLE_AUTH=true` 后，写入、问答、流式接口均需要请求头 `X-API-Key`。
+- `API_KEYS` 采用逗号分隔多个可吊销 key，仅有服务端启动时读取的 key 才会被接受。
+- `RATE_LIMIT_PER_MIN` 控制单 IP 问答限流，默认 60。
+- `.env` 已在 `.gitignore` 中被忽略；仓库中仅提供 `.env.example` 占位值，请勿将真实密钥提交入库。
+- 在 `/api/system/status` 中可查看当前鉴权状态与限流阈值。
+
+## 已知限制与演进路线
+项目当前作为面试作品集原型，以下是已识别的短板，请按优先级阅读：
+
+### 性能 / 可扩展性
+- BM25 仅在内存构建，重启会丢失。本仓已增加 pickle 持久化（`backend/data/vector_db/bm25.pkl`），后续版本考虑接入 Whoosh / Elasticsearch 以支持增量更新。
+- FAISS 默认使用 `IndexFlatIP` 是 O(n) 扫描，适合千级向量；如果扩到百万级，请切换到 `IndexIVFFlat` / `HNSW`。
+- KG 写入已优化为 `UNWIND` 批量 MERGE，后续可考虑采用 APOC `apoc.periodic.iterate` 进一步并发。
+
+### 检索 / 推理质量
+- 实体抽取仅处理文档前 3000 字符，后续需要分段抽取 + 同义词联通，避免同名实体在图中被重复创建。
+- Verification 仅做文本抽查，后续会接入 LLM-as-judge 与 Citation Recall 评价。
+- Eval 仅含 5 道题，后续会扩充多跳 / 干扰 / 负例集，并补充 hit@k / faithfulness 指标。
+
+### 安全 / 合规
+- API Key + 限流仅为最小可用方案，生产部署建议在网关层增加 OAuth / mTLS / SSO。
+- 当前未区分租户与文档权限，后续需与 RBAC / ACL 集成。
+- 上传仅做扩展名与大小检查，生产环境请增加 MIME 检查、病毒扫描、上传颁发限额。
+
+### 可观测 / 运维
+- 日志已由 print 迁移到 loguru，后续会接入 OpenTelemetry / Prometheus exporter 以采集检索延迟、LLM token 消耗、失败率。
+- 现阶段未接入告警，后续会与 Grafana / 钉钉 / Slack webhook 集成。
+
+### 前端 / 交互
+- 前端 API 地址默认 `http://localhost:8000`，生产环境请使用 `NEXT_PUBLIC_API_BASE_URL` 覆盖。
+- 问答交互尚未支持多轮上下文会话，后续会接入会话存储与收发上下文压缩。
 
 ## License
 MIT
