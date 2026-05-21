@@ -1,15 +1,17 @@
 """GraphRAG Copilot - FAISS 向量存储 + Embedding"""
 from typing import List, Dict, Any
 import json
+import threading
 import numpy as np
 from config.settings import settings
+from app.core.logger import logger
 
 try:
     import faiss
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
-    print("FAISS 未安装，向量检索功能将不可用")
+    logger.warning("FAISS 未安装，向量检索功能将不可用")
 
 class VectorStore:
     def __init__(self, store_type: str = None):
@@ -17,6 +19,7 @@ class VectorStore:
         self.dimension = settings.EMBEDDING_DIMENSION
         self.index = None
         self.documents = []
+        self._lock = threading.Lock()
         self._init_store()
 
     def _init_store(self):
@@ -33,9 +36,14 @@ class VectorStore:
         docs_path = settings.VECTOR_DB_DIR / "documents.json"
 
         if index_path.exists() and docs_path.exists():
-            self.index = faiss.read_index(str(index_path))
-            with open(docs_path, "r", encoding="utf-8") as f:
-                self.documents = json.load(f)
+            try:
+                self.index = faiss.read_index(str(index_path))
+                with open(docs_path, "r", encoding="utf-8") as f:
+                    self.documents = json.load(f)
+            except Exception:
+                logger.exception("FAISS 索引加载失败，重建空索引")
+                self.index = faiss.IndexFlatIP(self.dimension)
+                self.documents = []
         else:
             self.index = faiss.IndexFlatIP(self.dimension)
             self.documents = []
@@ -49,16 +57,16 @@ class VectorStore:
 
         embeddings_array = np.array(embeddings, dtype=np.float32)
         faiss.normalize_L2(embeddings_array)
-        self.index.add(embeddings_array)
 
-        for doc in documents:
-            self.documents.append({
-                "id": doc.get("id", len(self.documents)),
-                "content": doc.get("content", ""),
-                "metadata": doc.get("metadata", {}),
-            })
-
-        self._save()
+        with self._lock:
+            self.index.add(embeddings_array)
+            for doc in documents:
+                self.documents.append({
+                    "id": doc.get("id", len(self.documents)),
+                    "content": doc.get("content", ""),
+                    "metadata": doc.get("metadata", {}),
+                })
+            self._save()
 
     def search(self, query_embedding: List[float], top_k: int = None) -> List[Dict[str, Any]]:
         if not FAISS_AVAILABLE or self.index is None or self.index.ntotal == 0:
@@ -79,15 +87,19 @@ class VectorStore:
         return results
 
     def _save(self):
+        """必须在 self._lock 保护下调用"""
         if not FAISS_AVAILABLE or self.index is None:
             return
 
         index_path = settings.VECTOR_DB_DIR / "faiss.index"
         docs_path = settings.VECTOR_DB_DIR / "documents.json"
 
-        faiss.write_index(self.index, str(index_path))
-        with open(docs_path, "w", encoding="utf-8") as f:
-            json.dump(self.documents, f, ensure_ascii=False, indent=2)
+        try:
+            faiss.write_index(self.index, str(index_path))
+            with open(docs_path, "w", encoding="utf-8") as f:
+                json.dump(self.documents, f, ensure_ascii=False, indent=2)
+        except Exception:
+            logger.exception("FAISS 索引落盘失败")
 
     def get_stats(self) -> Dict[str, Any]:
         return {
@@ -111,8 +123,8 @@ class EmbeddingService:
                 device=settings.EMBEDDING_DEVICE,
             )
             self.use_tfidf = False
-        except Exception as e:
-            print("Embedding 模型加载失败，使用 hash 备选:", e)
+        except Exception:
+            logger.exception("Embedding 模型加载失败，使用 hash 备选")
             self.model = None
             self.use_tfidf = True
 
