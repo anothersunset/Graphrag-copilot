@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, CSSProperties } from "react";
-import { GraphSettings } from "./types";
+import { GraphSettings, COLOR_THEME_PRESETS } from "./types";
 
 interface Props {
   value: GraphSettings;
@@ -182,6 +182,25 @@ const REPLAY_BTN_STYLE: CSSProperties = {
   cursor: "pointer",
 };
 
+const SELECT_WRAP_STYLE: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  marginBottom: 8,
+};
+
+const SELECT_STYLE: CSSProperties = {
+  width: "100%",
+  padding: "6px 8px",
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 6,
+  color: "#fff",
+  fontSize: 13,
+  outline: "none",
+  cursor: "pointer",
+};
+
 // 动态颜色点：辅助函数返回一个 CSSProperties，避免在 JSX 里写内联对象
 function dotStyle(color: string): CSSProperties {
   return {
@@ -256,6 +275,19 @@ export default function ControlPanel({
 
       {typeColor && Object.keys(typeColor).length > 0 && (
         <Section title="颜色组">
+          <div style={SELECT_WRAP_STYLE}>
+            <select
+              value={value.colorTheme}
+              onChange={(e) => set("colorTheme", e.target.value)}
+              style={SELECT_STYLE}
+            >
+              {Object.keys(COLOR_THEME_PRESETS).map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div style={COLOR_LIST_STYLE}>
             {Object.entries(typeColor).map(([type, color]) => (
               <div key={type} style={COLOR_ROW_STYLE}>
@@ -269,6 +301,7 @@ export default function ControlPanel({
 
       <Section title="外观">
         <Toggle label="箭头" v={value.showArrows} on={(v) => set("showArrows", v)} />
+        <Toggle label="显示小地图" v={value.showMinimap} on={(v) => set("showMinimap", v)} />
         <Slider
           label="文本透明度"
           min={0}
