@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge } from "@xyflow/react";
+import { ReactFlow, Background, Controls, MiniMap, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { buildLayout } from "./nodes";
 import { AuditDrawer } from "./AuditDrawer";
 import type { RunResponse } from "@/lib/api";
+
+const FIT_VIEW_OPTIONS = { padding: 0.2 };
+const PRO_OPTIONS = { hideAttribution: true };
 
 export function AgentFlow({ data }: { data: RunResponse | null }) {
   const [activeNode, setActiveNode] = useState<string | null>(null);
@@ -19,9 +22,9 @@ export function AgentFlow({ data }: { data: RunResponse | null }) {
           nodes={nodes}
           edges={edges}
           fitView
-          fitViewOptions= padding: 0.2 
+          fitViewOptions={FIT_VIEW_OPTIONS}
           onNodeClick={(_, n: Node) => setActiveNode(n.id)}
-          proOptions= hideAttribution: true 
+          proOptions={PRO_OPTIONS}
         >
           <Background gap={16} />
           <Controls position="bottom-right" />

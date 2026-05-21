@@ -1,0 +1,10 @@
+{
+  "packages/schemas": "0.1.0",
+  "packages/graph": "0.1.0",
+  "packages/retrieval": "0.1.0",
+  "packages/parsers": "0.1.0",
+  "packages/observability": "0.1.0",
+  "packages/eval": "0.1.0",
+  "apps/api": "0.1.0",
+  "apps/web": "0.1.0"
+}

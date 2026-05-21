@@ -1,0 +1,66 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "python",
+  "include-component-in-tag": true,
+  "separate-pull-requests": false,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "graphrag-copilot",
+      "components": [
+        "graphrag-schemas",
+        "graphrag-graph",
+        "graphrag-retrieval",
+        "graphrag-parsers",
+        "graphrag-observability",
+        "graphrag-eval",
+        "graphrag-api"
+      ]
+    }
+  ],
+  "packages": {
+    "packages/schemas": {
+      "package-name": "graphrag-schemas",
+      "component": "graphrag-schemas",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/graph": {
+      "package-name": "graphrag-graph",
+      "component": "graphrag-graph",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/retrieval": {
+      "package-name": "graphrag-retrieval",
+      "component": "graphrag-retrieval",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/parsers": {
+      "package-name": "graphrag-parsers",
+      "component": "graphrag-parsers",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/observability": {
+      "package-name": "graphrag-observability",
+      "component": "graphrag-observability",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/eval": {
+      "package-name": "graphrag-eval",
+      "component": "graphrag-eval",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "apps/api": {
+      "package-name": "graphrag-api",
+      "component": "graphrag-api",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "apps/web": {
+      "package-name": "graphrag-web",
+      "component": "graphrag-web",
+      "release-type": "node",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}
