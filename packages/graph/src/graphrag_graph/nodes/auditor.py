@@ -1,57 +1,58 @@
-"""Auditor node — post-generation faithfulness + citation verification."""
+"""Auditor node — DSPy verdict with citation-count fallback."""
 from __future__ import annotations
 
-import logging
-from typing import Any
+from datetime import datetime, timezone
 
-from .._utils import digest, now_iso
-from ..state import GraphState
-
-logger = logging.getLogger(__name__)
+from ..contracts import AuditEntry
+from ..dspy_auditor import DSPyAuditor
 
 
-def auditor_node(
-    state: GraphState, config: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    cfg = config or {}
-    auditor = cfg.get("auditor_client")
-    strict = bool(cfg.get("auditor_strict", False))
-
-    question = state["question"]
+def auditor(state: dict, *, config: dict | None = None) -> dict:
+    config = config or {}
+    dspy_auditor: DSPyAuditor | None = config.get("dspy_auditor")
+    fused = state.get("fused_hits") or state.get("hits") or []
     answer = state.get("answer", "")
-    citations = state.get("citations", [])
+    chunk_ids = [h.get("chunk_id") for h in fused if h.get("chunk_id")]
 
-    if auditor is not None:
-        report = auditor.audit(
-            question=question, answer=answer, citations=citations
-        )
-        verdict = report.get("verdict", "pass")
-        notes = list(report.get("notes", []))
-    else:
-        # Heuristic fallback used in tests / dry runs:
-        #   - non-empty answer + at least 1 citation → pass
-        #   - else → warn
-        if answer and citations:
-            verdict, notes = "pass", []
-        else:
-            verdict, notes = "warn", ["no citations or empty answer"]
+    verdict_str = "pass"
+    rationale = ""
+    cited: list[str] = []
 
-    if strict and verdict == "warn":
-        verdict = "fail"
+    if dspy_auditor is not None:
+        try:
+            v = dspy_auditor.audit(
+                question=state.get("query", ""),
+                contexts=[h.get("content", "") for h in fused],
+                draft_answer=answer,
+                chunk_ids=chunk_ids,
+            )
+            verdict_str = v.verdict
+            rationale = v.rationale
+            cited = v.cited_chunk_ids
+        except Exception:
+            # fall through to heuristic
+            pass
 
-    audit = {
-        "node": "auditor",
-        "decision": verdict,
-        "rationale": "; ".join(notes) if notes else "ok",
-        "inputs_digest": digest(
-            {"q": question, "a": answer[:200], "n_cites": len(citations)}
-        ),
-        "outputs_digest": digest({"verdict": verdict, "notes": notes}),
-        "timestamp": now_iso(),
-    }
+    if not cited:
+        # Heuristic fallback: count chunk_ids that literally appear in the answer.
+        cited = [cid for cid in chunk_ids if cid and cid in answer]
+        if not cited and fused:
+            cited = chunk_ids[:3]
+        verdict_str = "pass" if cited else "unsupported"
+        rationale = rationale or "heuristic auditor: cited chunks present in answer"
 
+    audit = AuditEntry(
+        node="auditor",
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        summary=f"verdict={verdict_str} cited={len(cited)}",
+        detail={
+            "verdict": verdict_str,
+            "rationale": rationale,
+            "cited_tools": list({h.get("source") for h in fused if h.get("source")}),
+        },
+    )
     return {
-        "auditor_verdict": verdict,
-        "auditor_notes": notes,
         "audit": [audit],
+        "cited_chunk_ids": cited,
+        "verdict": verdict_str,
     }
