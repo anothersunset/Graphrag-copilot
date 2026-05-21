@@ -1,153 +1,220 @@
 """Tests for app.agents.orchestrator.MultiAgentOrchestrator"""
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
+
+
+# Mock the module-level imports before importing the orchestrator
+@pytest.fixture(autouse=True)
+def mock_services():
+    """Mock all external service dependencies."""
+    with patch.dict("sys.modules", {
+        "app.services.llm_service": MagicMock(),
+        "app.services.vector_store": MagicMock(),
+        "app.services.bm25_store": MagicMock(),
+        "app.services.kg_service": MagicMock(),
+        "app.services.evidence_fusion": MagicMock(),
+    }):
+        yield
 
 
 class TestMultiAgentOrchestrator:
     """Test suite for the multi-agent orchestrator."""
 
-    def setup_method(self):
-        """Set up test fixtures before each test method."""
-        with patch("app.agents.orchestrator.QueryAgent") as MockQuery, \
-             patch("app.agents.orchestrator.RetrievalAgent") as MockRetrieval, \
-             patch("app.agents.orchestrator.ReasoningAgent") as MockReasoning, \
-             patch("app.agents.orchestrator.VerificationAgent") as MockVerification, \
-             patch("app.agents.orchestrator.GenerationAgent") as MockGeneration:
-            
-            from app.agents.orchestrator import MultiAgentOrchestrator
-            self.orchestrator = MultiAgentOrchestrator()
-            
-            # Store mock agents for assertions
-            self.mock_query_agent = self.orchestrator.query_agent
-            self.mock_retrieval_agent = self.orchestrator.retrieval_agent
-            self.mock_reasoning_agent = self.orchestrator.reasoning_agent
-            self.mock_verification_agent = self.orchestrator.verification_agent
-            self.mock_generation_agent = self.orchestrator.generation_agent
+    def test_完整流程返回所有字段(self, mock_services):
+        """完整流程应返回所有预期字段。"""
+        from unittest.mock import MagicMock
 
-    def test_完整流程返回所有字段(self):
-        """Test that the full pipeline returns all expected fields."""
-        # Arrange
-        self.mock_query_agent.analyze.return_value = {
-            "intent": "factual",
+        # Create mock agents
+        mock_query = MagicMock()
+        mock_query.analyze.return_value = {
+            "intent": "query",
+            "entities": ["test"],
             "keywords": ["test"],
-            "rewritten_query": "test query",
+            "complexity": "simple",
+            "requires_multi_hop": False,
+            "query_rewrite": "test query",
+            "original_query": "What is test?",
         }
-        self.mock_retrieval_agent.retrieve.return_value = [
-            {"content": "doc1", "score": 0.9},
-            {"content": "doc2", "score": 0.8},
-        ]
-        self.mock_reasoning_agent.reason.return_value = {
-            "reasoning_chain": ["step1", "step2"],
-            "conclusion": "test conclusion",
+
+        mock_retrieval = MagicMock()
+        mock_retrieval.hybrid_search.return_value = {
+            "vector_results": [{"content": "doc1", "score": 0.9}],
+            "bm25_results": [],
+            "graph_results": {},
+            "combined_context": [{"content": "doc1", "type": "text", "source": "file.txt", "fusion_score": 0.9}],
+            "warnings": [],
         }
-        self.mock_verification_agent.verify.return_value = {
-            "is_consistent": True,
-            "confidence": 0.95,
+
+        mock_reasoning = MagicMock()
+        mock_reasoning.reason.return_value = {
+            "answer": "Test answer",
+            "reasoning_path": ["step1"],
+            "sources_used": ["doc1"],
+            "confidence": 0.85,
+            "limitations": "",
+        }
+
+        mock_verification = MagicMock()
+        mock_verification.verify.return_value = {
+            "is_supported": True,
+            "hallucination_detected": False,
+            "confidence": 0.9,
             "issues": [],
-        }
-        self.mock_generation_agent.generate.return_value = {
-            "answer": "This is the answer.",
-            "citations": ["doc1"],
+            "source_mapping": {},
         }
 
-        # Act
-        result = self.orchestrator.process_query("What is test?", top_k=5)
+        mock_generation = MagicMock()
+        mock_generation.generate.return_value = "Final answer with sources."
 
-        # Assert
+        # Patch the orchestrator class
+        with patch("app.agents.orchestrator.QueryUnderstandingAgent", return_value=mock_query), \
+             patch("app.agents.orchestrator.RetrievalAgent", return_value=mock_retrieval), \
+             patch("app.agents.orchestrator.ReasoningAgent", return_value=mock_reasoning), \
+             patch("app.agents.orchestrator.VerificationAgent", return_value=mock_verification), \
+             patch("app.agents.orchestrator.GenerationAgent", return_value=mock_generation):
+
+            from app.agents.orchestrator import MultiAgentOrchestrator
+            orchestrator = MultiAgentOrchestrator()
+            result = orchestrator.process_query("What is test?", top_k=5)
+
         assert isinstance(result, dict)
         for field in ["query", "analysis", "answer", "reasoning", "verification", "sources", "confidence", "trace"]:
             assert field in result, f"Missing field: {field}"
         assert result["query"] == "What is test?"
-        assert result["confidence"] == 0.95
+        assert result["confidence"] == 0.9
 
-    def test_检索失败时优雅降级(self):
-        """Test graceful degradation when retrieval fails."""
-        # Arrange
-        self.mock_query_agent.analyze.return_value = {
-            "intent": "factual",
-            "keywords": ["test"],
-            "rewritten_query": "test query",
-        }
-        self.mock_retrieval_agent.retrieve.side_effect = RuntimeError("Retrieval service unavailable")
-        self.mock_generation_agent.generate.return_value = {
-            "answer": "I cannot find relevant information due to retrieval failure.",
-            "citations": [],
+    def test_检索失败时优雅降级(self, mock_services):
+        """检索失败时应优雅降级，不崩溃。"""
+        mock_query = MagicMock()
+        mock_query.analyze.return_value = {
+            "intent": "query", "entities": [], "keywords": ["test"],
+            "complexity": "simple", "requires_multi_hop": False,
+            "query_rewrite": "test", "original_query": "test",
         }
 
-        # Act
-        result = self.orchestrator.process_query("What is test?", top_k=5)
+        mock_retrieval = MagicMock()
+        mock_retrieval.hybrid_search.return_value = {
+            "vector_results": [], "bm25_results": [], "graph_results": {},
+            "combined_context": [], "warnings": ["vector_search_failed: timeout"],
+        }
 
-        # Assert
+        mock_reasoning = MagicMock()
+        mock_reasoning.reason.return_value = {
+            "answer": "当前知识库中没有找到足够信息回答这个问题。",
+            "reasoning_path": ["没有召回到有效证据"],
+            "sources_used": [], "confidence": 0.0, "limitations": "retrieval_empty",
+        }
+
+        mock_verification = MagicMock()
+        mock_verification.verify.return_value = {
+            "is_supported": False, "hallucination_detected": False,
+            "confidence": 0.0, "issues": ["No sources"], "source_mapping": {},
+        }
+
+        mock_generation = MagicMock()
+        mock_generation.generate.return_value = "当前知识库中没有找到足够信息回答这个问题。"
+
+        with patch("app.agents.orchestrator.QueryUnderstandingAgent", return_value=mock_query), \
+             patch("app.agents.orchestrator.RetrievalAgent", return_value=mock_retrieval), \
+             patch("app.agents.orchestrator.ReasoningAgent", return_value=mock_reasoning), \
+             patch("app.agents.orchestrator.VerificationAgent", return_value=mock_verification), \
+             patch("app.agents.orchestrator.GenerationAgent", return_value=mock_generation):
+
+            from app.agents.orchestrator import MultiAgentOrchestrator
+            orchestrator = MultiAgentOrchestrator()
+            result = orchestrator.process_query("test", top_k=5)
+
         assert isinstance(result, dict)
-        assert result["sources"] == [] or result["sources"] is not None
         assert "answer" in result
+        assert result["confidence"] == 0.0
 
-    def test_空上下文返回无信息回答(self):
-        """Test that empty context leads to a 'no information' answer."""
-        # Arrange
-        self.mock_query_agent.analyze.return_value = {
-            "intent": "factual",
-            "keywords": ["unknown"],
-            "rewritten_query": "unknown query",
-        }
-        self.mock_retrieval_agent.retrieve.return_value = []
-        self.mock_reasoning_agent.reason.return_value = {
-            "reasoning_chain": [],
-            "conclusion": "No context available",
-        }
-        self.mock_verification_agent.verify.return_value = {
-            "is_consistent": True,
-            "confidence": 0.0,
-            "issues": ["No sources found"],
-        }
-        self.mock_generation_agent.generate.return_value = {
-            "answer": "I don't have enough information to answer this question.",
-            "citations": [],
+    def test_空上下文返回无信息回答(self, mock_services):
+        """空上下文应返回'无足够信息'的回答。"""
+        mock_query = MagicMock()
+        mock_query.analyze.return_value = {
+            "intent": "query", "entities": [], "keywords": ["unknown"],
+            "complexity": "simple", "requires_multi_hop": False,
+            "query_rewrite": "unknown", "original_query": "unknown",
         }
 
-        # Act
-        result = self.orchestrator.process_query("Unknown topic?", top_k=5)
+        mock_retrieval = MagicMock()
+        mock_retrieval.hybrid_search.return_value = {
+            "vector_results": [], "bm25_results": [], "graph_results": {},
+            "combined_context": [], "warnings": [],
+        }
 
-        # Assert
+        mock_reasoning = MagicMock()
+        mock_reasoning.reason.return_value = {
+            "answer": "当前知识库中没有找到足够信息回答这个问题。",
+            "reasoning_path": [], "sources_used": [], "confidence": 0.0,
+            "limitations": "retrieval_empty",
+        }
+
+        mock_verification = MagicMock()
+        mock_verification.verify.return_value = {
+            "is_supported": False, "hallucination_detected": False,
+            "confidence": 0.0, "issues": [], "source_mapping": {},
+        }
+
+        mock_generation = MagicMock()
+        mock_generation.generate.return_value = "当前知识库中没有找到足够信息回答这个问题。"
+
+        with patch("app.agents.orchestrator.QueryUnderstandingAgent", return_value=mock_query), \
+             patch("app.agents.orchestrator.RetrievalAgent", return_value=mock_retrieval), \
+             patch("app.agents.orchestrator.ReasoningAgent", return_value=mock_reasoning), \
+             patch("app.agents.orchestrator.VerificationAgent", return_value=mock_verification), \
+             patch("app.agents.orchestrator.GenerationAgent", return_value=mock_generation):
+
+            from app.agents.orchestrator import MultiAgentOrchestrator
+            orchestrator = MultiAgentOrchestrator()
+            result = orchestrator.process_query("Unknown topic?", top_k=5)
+
         assert "answer" in result
-        assert result["confidence"] == 0.0 or result["confidence"] < 0.5
-
-    def test_低置信度添加警告(self):
-        """Test that low confidence triggers a warning in the response."""
-        # Arrange
-        self.mock_query_agent.analyze.return_value = {
-            "intent": "factual",
-            "keywords": ["ambiguous"],
-            "rewritten_query": "ambiguous query",
-        }
-        self.mock_retrieval_agent.retrieve.return_value = [
-            {"content": "weak doc", "score": 0.3},
-        ]
-        self.mock_reasoning_agent.reason.return_value = {
-            "reasoning_chain": ["uncertain step"],
-            "conclusion": "uncertain conclusion",
-        }
-        self.mock_verification_agent.verify.return_value = {
-            "is_consistent": False,
-            "confidence": 0.2,
-            "issues": ["Low source quality", "Contradictory information"],
-        }
-        self.mock_generation_agent.generate.return_value = {
-            "answer": "Possible answer but uncertain.",
-            "citations": ["weak doc"],
-        }
-
-        # Act
-        result = self.orchestrator.process_query("Ambiguous question?", top_k=5)
-
-        # Assert
         assert result["confidence"] < 0.5
-        # Check for warning indicators - could be in trace, verification, or a dedicated field
-        has_warning = (
-            "warning" in result
-            or "warning" in str(result.get("trace", "")).lower()
-            or "warning" in str(result.get("verification", "")).lower()
-            or result.get("confidence", 1.0) < 0.5
-        )
-        assert has_warning, "Expected a warning for low confidence response"
+
+    def test_低置信度添加警告(self, mock_services):
+        """低置信度应在结果中标记。"""
+        mock_query = MagicMock()
+        mock_query.analyze.return_value = {
+            "intent": "query", "entities": [], "keywords": ["ambiguous"],
+            "complexity": "medium", "requires_multi_hop": False,
+            "query_rewrite": "ambiguous", "original_query": "ambiguous",
+        }
+
+        mock_retrieval = MagicMock()
+        mock_retrieval.hybrid_search.return_value = {
+            "vector_results": [], "bm25_results": [], "graph_results": {},
+            "combined_context": [{"content": "weak", "type": "text", "source": "weak.txt", "fusion_score": 0.3}],
+            "warnings": [],
+        }
+
+        mock_reasoning = MagicMock()
+        mock_reasoning.reason.return_value = {
+            "answer": "不确定的回答",
+            "reasoning_path": ["uncertain"], "sources_used": ["weak"],
+            "confidence": 0.3, "limitations": "low_quality_sources",
+        }
+
+        mock_verification = MagicMock()
+        mock_verification.verify.return_value = {
+            "is_supported": False, "hallucination_detected": True,
+            "confidence": 0.2, "issues": ["Low quality", "Contradictory"],
+            "source_mapping": {},
+        }
+
+        mock_generation = MagicMock()
+        mock_generation.generate.return_value = "可能的答案，但不确定。\n\n注意: 当前答案置信度较低，建议结合原文进一步核实。"
+
+        with patch("app.agents.orchestrator.QueryUnderstandingAgent", return_value=mock_query), \
+             patch("app.agents.orchestrator.RetrievalAgent", return_value=mock_retrieval), \
+             patch("app.agents.orchestrator.ReasoningAgent", return_value=mock_reasoning), \
+             patch("app.agents.orchestrator.VerificationAgent", return_value=mock_verification), \
+             patch("app.agents.orchestrator.GenerationAgent", return_value=mock_generation):
+
+            from app.agents.orchestrator import MultiAgentOrchestrator
+            orchestrator = MultiAgentOrchestrator()
+            result = orchestrator.process_query("Ambiguous?", top_k=5)
+
+        assert result["confidence"] < 0.5
+        assert "注意" in result["answer"] or result["confidence"] < 0.5

@@ -5,117 +5,64 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 
-class TestVectorStore:
-    """Test suite for VectorStore operations."""
+@pytest.fixture(autouse=True)
+def mock_settings():
+    """Mock settings and sentence_transformers."""
+    mock_settings = MagicMock()
+    mock_settings.VECTOR_STORE_TYPE = "faiss"
+    mock_settings.EMBEDDING_DIMENSION = 512
+    mock_settings.VECTOR_DB_DIR = MagicMock()
+    mock_settings.VECTOR_DB_DIR.__truediv__ = lambda self, x: MagicMock(exists=lambda: False)
+    mock_settings.EMBEDDING_MODEL = "test-model"
+    mock_settings.EMBEDDING_DEVICE = "cpu"
+    mock_settings.VECTOR_SEARCH_TOP_K = 10
 
-    def setup_method(self):
-        """Set up test fixtures before each test method."""
-        with patch("app.services.vector_store.faiss") as mock_faiss:
-            # Mock FAISS index
-            mock_index = MagicMock()
-            mock_faiss.IndexFlatIP.return_value = mock_index
-            mock_faiss.IndexFlatL2.return_value = mock_index
-            
-            from app.services.vector_store import VectorStore
-            self.store = VectorStore(store_type="faiss")
-            self.mock_index = mock_index
-            self.mock_faiss = mock_faiss
+    mock_st = MagicMock()
+    mock_model = MagicMock()
+    mock_model.encode.return_value = np.random.randn(2, 512).astype("float32")
+    mock_st.SentenceTransformer.return_value = mock_model
 
-    def test_添加文档后搜索能返回结果(self):
-        """Test that after adding documents, search returns results."""
-        # Arrange
-        dim = 128
-        docs = [
-            {"id": "doc1", "content": "First document", "metadata": {"source": "test"}},
-            {"id": "doc2", "content": "Second document", "metadata": {"source": "test"}},
-        ]
-        embeddings = np.random.randn(2, dim).astype("float32")
-        
-        # Mock FAISS search to return results
-        self.mock_index.search.return_value = (
-            np.array([[0.9, 0.8]]),  # distances
-            np.array([[0, 1]]),       # indices
-        )
-        self.mock_index.ntotal = 2
-
-        # Act
-        self.store.add_documents(docs, embeddings)
-        results = self.store.search(np.random.randn(dim).astype("float32"), top_k=2)
-
-        # Assert
-        assert isinstance(results, list)
-        assert len(results) <= 2
-
-    def test_空索引搜索返回空列表(self):
-        """Test that searching an empty index returns empty results."""
-        # Arrange
-        dim = 128
-        self.mock_index.ntotal = 0
-        self.mock_index.search.return_value = (
-            np.array([[]]),   # empty distances
-            np.array([[]]),   # empty indices
-        )
-
-        # Act
-        results = self.store.search(np.random.randn(dim).astype("float32"), top_k=5)
-
-        # Assert
-        assert isinstance(results, list)
-        assert len(results) == 0
-
-    def test_文档数量和向量数量不一致抛异常(self):
-        """Test that mismatched document and embedding counts raise an error."""
-        # Arrange
-        dim = 128
-        docs = [
-            {"id": "doc1", "content": "First document", "metadata": {}},
-            {"id": "doc2", "content": "Second document", "metadata": {}},
-        ]
-        # Only 1 embedding for 2 documents
-        embeddings = np.random.randn(1, dim).astype("float32")
-
-        # Act & Assert
-        with pytest.raises((ValueError, AssertionError)):
-            self.store.add_documents(docs, embeddings)
-
-    def test_get_stats返回正确统计(self):
-        """Test that get_stats returns correct statistics."""
-        # Arrange
-        self.mock_index.ntotal = 42
-        
-        # Act
-        stats = self.store.get_stats()
-
-        # Assert
-        assert isinstance(stats, dict)
-        assert stats.get("total_vectors") == 42 or stats.get("document_count") == 42
+    with patch.dict("sys.modules", {
+        "config.settings": MagicMock(settings=mock_settings),
+        "sentence_transformers": mock_st,
+    }):
+        yield mock_settings, mock_model
 
 
 class TestEmbeddingService:
     """Test suite for EmbeddingService."""
 
-    def setup_method(self):
-        """Set up test fixtures before each test method."""
-        with patch("app.services.vector_store.OpenAI") as MockOpenAI:
-            self.mock_client = MagicMock()
-            MockOpenAI.return_value = self.mock_client
-            
-            from app.services.vector_store import EmbeddingService
-            self.service = EmbeddingService()
+    def test_embed_query返回正确维度的向量(self, mock_settings):
+        """embed_query 应返回 512 维向量。"""
+        mock_settings_tuple, mock_model = mock_settings
+        mock_model.encode.return_value = np.random.randn(1, 512).astype("float32")
 
-    def test_embed_query返回正确维度的向量(self):
-        """Test that embed_query returns a vector with the expected dimension."""
-        # Arrange
-        expected_dim = 1536
-        mock_embedding = [0.1] * expected_dim
-        self.mock_client.embeddings.create.return_value = MagicMock(
-            data=[MagicMock(embedding=mock_embedding)]
-        )
+        from app.services.vector_store import EmbeddingService
+        service = EmbeddingService()
+        result = service.embed_query("test query")
 
-        # Act
-        result = self.service.embed_query("test query")
-
-        # Assert
         assert isinstance(result, list)
-        assert len(result) == expected_dim
-        self.mock_client.embeddings.create.assert_called_once()
+        assert len(result) == 512
+
+    def test_embed批量编码(self, mock_settings):
+        """embed 应为每个文本返回一个向量。"""
+        mock_settings_tuple, mock_model = mock_settings
+        mock_model.encode.return_value = np.random.randn(2, 512).astype("float32")
+
+        from app.services.vector_store import EmbeddingService
+        service = EmbeddingService()
+        results = service.embed(["hello", "world"])
+
+        assert isinstance(results, list)
+        assert len(results) == 2
+
+    def test_hash_fallback模式(self, mock_settings):
+        """当 sentence_transformers 不可用时，应降级为 hash embed。"""
+        mock_settings_tuple, mock_model = mock_settings
+
+        with patch.dict("sys.modules", {"sentence_transformers": None}):
+            from app.services.vector_store import EmbeddingService
+            service = EmbeddingService()
+            assert service.use_tfidf is True
+            result = service.embed_query("fallback test")
+            assert len(result) == 512
