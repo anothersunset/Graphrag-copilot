@@ -1,55 +1,33 @@
-"""Evaluator node — CRAG scoring on fused hits."""
+"""Evaluator node — wraps CragScorer."""
 from __future__ import annotations
 
-import logging
+from datetime import datetime, timezone
 from typing import Any
 
-from .._utils import digest, now_iso
-from ..config import CragThresholds
-from ..state import GraphState
-
-logger = logging.getLogger(__name__)
+from ..contracts import AuditEntry
+from ..crag import CragScorer
 
 
-def evaluator_node(
-    state: GraphState, config: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    cfg = config or {}
-    thresholds: CragThresholds = cfg.get("crag", CragThresholds())
-    scorer = cfg.get("crag_scorer")
+def evaluator(state: dict, *, config: dict | None = None) -> dict:
+    """Score the current candidate set and emit a CRAG decision."""
+    config = config or {}
+    scorer: CragScorer = config.get("crag_scorer") or CragScorer()
+    hits = state.get("fused_hits") or state.get("hits") or []
+    result = scorer.score(state.get("query", ""), hits)
 
-    question = state["question"]
-    fused = state.get("fused_hits", [])
-
-    if not fused:
-        score = 0.0
-    elif scorer is not None:
-        score = float(scorer.score(question, fused))
-    else:
-        # Fallback heuristic: top-1 score, clipped to [0, 1]
-        top_score = max(
-            (h.get("rerank_score") or h.get("score", 0.0)) for h in fused
-        )
-        score = max(0.0, min(1.0, float(top_score)))
-
-    decision = thresholds.decide(score)
-
-    audit = {
-        "node": "evaluator",
-        "decision": decision,
-        "rationale": (
-            f"crag_score={score:.3f} vs thresholds use>={thresholds.use} "
-            f"rewrite>={thresholds.rewrite_low}"
-        ),
-        "inputs_digest": digest({"q": question, "n_hits": len(fused)}),
-        "outputs_digest": digest({"score": round(score, 4), "decision": decision}),
-        "timestamp": now_iso(),
-    }
-
-    logger.info("evaluator: score=%.3f decision=%s", score, decision)
-
+    audit = AuditEntry(
+        node="evaluator",
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        summary=f"CRAG decision={result.decision} score={result.score:.3f}",
+        detail={
+            "score": result.score,
+            "relevance": result.relevance,
+            "coverage": result.coverage,
+            **result.detail,
+        },
+    )
     return {
-        "crag_score": score,
-        "crag_decision": decision,
+        "crag_score": result.score,
+        "crag_decision": result.decision,
         "audit": [audit],
     }
