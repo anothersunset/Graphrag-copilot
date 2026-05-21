@@ -2,8 +2,10 @@
 注意: Cypher 的 inline property map {name: $name} 用 chr(123)/chr(125) 拼接生成，
 以避免源码工具或文本编辑器对花括号的转义/折叠。"""
 from typing import List, Dict, Any
+from collections import defaultdict
 from neo4j import GraphDatabase
 from config.settings import settings
+from app.core.logger import logger
 from app.core.constants import (
     ALLOWED_ENTITY_TYPES,
     ALLOWED_RELATION_TYPES,
@@ -33,7 +35,7 @@ class KnowledgeGraphService:
             )
             self.driver.verify_connectivity()
         except Exception as e:
-            print("Neo4j unavailable, graph features degraded:", e)
+            logger.warning("Neo4j unavailable, graph features degraded: {}", e)
             self.driver = None
 
     def close(self):
@@ -85,21 +87,84 @@ class KnowledgeGraphService:
             )
             return result.single() is not None
 
+    def _batch_merge_entities(self, label: str, rows: List[Dict[str, Any]]) -> int:
+        """在一个 session 中批量 MERGE 同 label 的实体。"""
+        if not self.driver or not rows:
+            return 0
+        query = (
+            "UNWIND $rows AS row "
+            "MERGE (e:" + label + " " + _LB + "name: row.name" + _RB + ") "
+            "SET e += row.properties "
+            "SET e.confidence = row.confidence "
+            "SET e.updated_at = datetime() "
+            "RETURN count(e) as cnt"
+        )
+        try:
+            with self.driver.session() as session:
+                rec = session.run(query, rows=rows).single()
+                return int(rec["cnt"]) if rec else 0
+        except Exception:
+            logger.exception("批量 MERGE 实体失败 label={}", label)
+            return 0
+
+    def _batch_merge_relations(self, rel_type: str, rows: List[Dict[str, Any]]) -> int:
+        """在一个 session 中批量 MERGE 同类型的关系。"""
+        if not self.driver or not rows:
+            return 0
+        query = (
+            "UNWIND $rows AS row "
+            "MATCH (a " + _LB + "name: row.source" + _RB + ") "
+            "MATCH (b " + _LB + "name: row.target" + _RB + ") "
+            "MERGE (a)-[r:" + rel_type + "]->(b) "
+            "SET r += row.properties "
+            "SET r.updated_at = datetime() "
+            "RETURN count(r) as cnt"
+        )
+        try:
+            with self.driver.session() as session:
+                rec = session.run(query, rows=rows).single()
+                return int(rec["cnt"]) if rec else 0
+        except Exception:
+            logger.exception("批量 MERGE 关系失败 type={}", rel_type)
+            return 0
+
     def ingest_knowledge(self, entities: List[Dict], relations: List[Dict]) -> Dict[str, int]:
+        """批量 UNWIND 写入: 按 label / rel_type 分组，每组一个 session。
+        避免 N 条数据产生 N 个 Neo4j session，显著加速大批量入图。"""
         stats = {"entities_created": 0, "relations_created": 0}
+        if not self.driver:
+            return stats
 
+        # 按 label 分组
+        ent_groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         for entity in entities:
-            if self.create_entity(entity):
-                stats["entities_created"] += 1
+            name = entity.get("name")
+            if not name:
+                continue
+            label = safe_label(entity.get("type", DEFAULT_ENTITY_TYPE))
+            ent_groups[label].append({
+                "name": name,
+                "properties": entity.get("properties", {}) or {},
+                "confidence": float(entity.get("confidence", 0.8) or 0.8),
+            })
+        for label, rows in ent_groups.items():
+            stats["entities_created"] += self._batch_merge_entities(label, rows)
 
+        # 按 rel_type 分组
+        rel_groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         for relation in relations:
-            if self.create_relation(
-                relation.get("source"),
-                relation.get("target"),
-                relation.get("type", DEFAULT_RELATION_TYPE),
-                relation.get("properties", {}),
-            ):
-                stats["relations_created"] += 1
+            src = relation.get("source")
+            tgt = relation.get("target")
+            if not src or not tgt:
+                continue
+            rel_type = safe_relation_type(relation.get("type", DEFAULT_RELATION_TYPE))
+            rel_groups[rel_type].append({
+                "source": src,
+                "target": tgt,
+                "properties": relation.get("properties", {}) or {},
+            })
+        for rel_type, rows in rel_groups.items():
+            stats["relations_created"] += self._batch_merge_relations(rel_type, rows)
 
         return stats
 
