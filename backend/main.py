@@ -15,9 +15,11 @@ try:
     from slowapi import Limiter, _rate_limit_exceeded_handler
     from slowapi.util import get_remote_address
     from slowapi.errors import RateLimitExceeded
+    from slowapi.middleware import SlowAPIMiddleware
     _SLOWAPI_AVAILABLE = True
 except ImportError:
     Limiter = None  # type: ignore
+    SlowAPIMiddleware = None  # type: ignore
     _SLOWAPI_AVAILABLE = False
     logger.warning("slowapi 未安装，限流被跳过")
 
@@ -54,6 +56,8 @@ app = FastAPI(
 if _SLOWAPI_AVAILABLE and limiter is not None:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # 关键：默认限流仅在挂上 SlowAPIMiddleware 后才生效
+    app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
