@@ -57,9 +57,39 @@ docker-compose up -d
 ```
 
 ## 测试
+项目同时维护三类测试：**单元测试**（pytest，不依赖外部服务）、**冷烟脚本**（test_api.py，针对已启动服务走一遭关键接口）、**评测脚本**（eval/run_eval.py，度量问答质量）。
+
+### 单元测试
 ```
 
 cd backend && pytest -q
+
+```
+关键用例覆盖：
+- `tests/test_security.py` — X-API-Key 鉴权 × 4 + slowapi 限流 429
+- `tests/test_bm25_persistence.py` — BM25 索引写盘 + 冷启动重加载
+- `tests/test_kg_batch.py` — KG 入图 `UNWIND` 分组批处理（mock Neo4j）
+- `tests/test_vector_store_lock.py` — FAISS 多线程并发写入不丢数
+- `tests/test_vector_store.py` / `test_routes.py` / `test_orchestrator*.py` / `test_evidence_fusion.py` / `test_fallback.py` / `test_llm_service.py` / `test_bm25_store.py`
+
+### 冷烟脚本（smoke）
+服务启动后运行，未通过会以非 0 退出，可作为部署/发布闸门：
+```
+
+BASE_URL=http://localhost:8000 python test_api.py
+
+# 启用鉴权 + 限流验证（API_KEY 需与服务端 API_KEYS 中某一个一致）
+BASE_URL=http://localhost:8000 \
+API_KEY=your-key \
+ENABLE_AUTH=true \
+RATE_LIMIT_PER_MIN=5 \
+python test_api.py
+
+```
+覆盖 9 个检查点：健康检查、系统状态、向量/图谱统计、问答、文档上传、鉴权(缺头·正确头)、限流 429。
+
+### 评测脚本
+```
 
 python eval/run_eval.py
 
@@ -72,7 +102,7 @@ python eval/run_eval.py
 GraphRAG Copilot 默认允许本地匿名访问，便于快速试用；在生产、公网或多租户环境中请启用鉴权与限流。
 - `ENABLE_AUTH=true` 后，写入、问答、流式接口均需要请求头 `X-API-Key`。
 - `API_KEYS` 采用逗号分隔多个可吊销 key，仅有服务端启动时读取的 key 才会被接受。
-- `RATE_LIMIT_PER_MIN` 控制单 IP 问答限流，默认 60。
+- `RATE_LIMIT_PER_MIN` 控制单 IP 问答限流，默认 60。该限流由 `SlowAPIMiddleware` 全局生效。
 - `.env` 已在 `.gitignore` 中被忽略；仓库中仅提供 `.env.example` 占位值，请勿将真实密钥提交入库。
 - 在 `/api/system/status` 中可查看当前鉴权状态与限流阈值。
 
