@@ -1,0 +1,50 @@
+name: CI · Frontend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-frontend-$ github.ref 
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Lint, type, build (Node $ matrix.node )
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22"]
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: $ matrix.node 
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install (no frozen lockfile until W1 D7 commits lockfile)
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Biome check
+        run: pnpm biome check src
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Next.js build
+        run: pnpm build
