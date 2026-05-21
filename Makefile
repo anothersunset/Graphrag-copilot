@@ -38,7 +38,6 @@ docker-build:  ## Build api + web Docker images
 ci-activate:  ## Render workflow templates into .github/workflows/ (run once after clone)
 	bash scripts/install-workflows.sh
 
-
 clean:  ## Remove caches
 	rm -rf .pytest_cache .ruff_cache .coverage coverage.xml htmlcov
 	find . -type d -name __pycache__ -exec rm -rf {} +
