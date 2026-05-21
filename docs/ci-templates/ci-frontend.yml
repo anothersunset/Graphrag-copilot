@@ -9,18 +9,10 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ci-frontend-$ github.ref 
-  cancel-in-progress: true
-
 jobs:
   build:
-    name: Lint, type, build (Node $ matrix.node )
+    name: Lint, type, build (Node 22)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ["22"]
     defaults:
       run:
         working-directory: apps/web
@@ -33,7 +25,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: $ matrix.node 
+          node-version: 22
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
