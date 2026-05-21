@@ -55,6 +55,18 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
+    # ---- Auth / Security (P0) ----
+    # 逗号分隔的允许 API Key 列表，仅从环境变量读取。仓库中不得出现真实密钥。
+    API_KEYS: Optional[str] = None
+    # 默认 False，保持本地 / Demo 零配置可用；上线/公网请设为 true。
+    ENABLE_AUTH: bool = False
+    # 简单限流，默认 60 / min / IP。
+    RATE_LIMIT_PER_MIN: int = 60
+
+    # ---- Logging (P0) ----
+    LOG_LEVEL: str = "INFO"
+    LOG_DIR: Optional[str] = None
+
     model_config = {
         "env_file": str(Path(__file__).parent.parent / ".env"),
         "env_file_encoding": "utf-8",
