@@ -9,18 +9,10 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ci-python-$ github.ref 
-  cancel-in-progress: true
-
 jobs:
   lint-test:
-    name: Lint, type, test (Python $ matrix.python )
+    name: Lint, type, test (Python 3.12)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.12"]
     steps:
       - uses: actions/checkout@v4
 
@@ -30,8 +22,8 @@ jobs:
           version: "0.4.x"
           enable-cache: true
 
-      - name: Set up Python
-        run: uv python install $ matrix.python 
+      - name: Set up Python 3.12
+        run: uv python install 3.12
 
       - name: Sync workspace (all packages + dev)
         run: uv sync --all-packages --dev
@@ -52,6 +44,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-py$ matrix.python 
+          name: coverage-py312
           path: coverage.xml
           if-no-files-found: ignore
