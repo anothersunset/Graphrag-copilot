@@ -2,16 +2,18 @@
 
 <div align="center">
 
-[![GitHub stars](https://img.shields.io/github/stars/qsm68p75m6-arch/Graphrag-copilot?style=flat-square)](https://github.com/qsm68p75m6-arch/Graphrag-copilot/stargazers)
-[![GitHub license](https://img.shields.io/github/license/qsm68p75m6-arch/Graphrag-copilot?style=flat-square)](https://github.com/qsm68p75m6-arch/Graphrag-copilot/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/anothersunset/Graphrag-copilot?style=flat-square)](https://github.com/anothersunset/Graphrag-copilot/stargazers)
+[![GitHub license](https://img.shields.io/github/license/anothersunset/Graphrag-copilot?style=flat-square)](https://github.com/anothersunset/Graphrag-copilot/blob/main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue?style=flat-square&logo=python)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
-[![CI](https://img.shields.io/github/actions/workflow/status/qsm68p75m6-arch/Graphrag-copilot/ci.yml?style=flat-square&label=CI)](https://github.com/qsm68p75m6-arch/Graphrag-copilot/actions)
-[![Release](https://img.shields.io/github/v/release/qsm68p75m6-arch/Graphrag-copilot?style=flat-square)](https://github.com/qsm68p75m6-arch/Graphrag-copilot/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/anothersunset/Graphrag-copilot/ci.yml?style=flat-square&label=CI)](https://github.com/anothersunset/Graphrag-copilot/actions)
+[![Release](https://img.shields.io/github/v/release/anothersunset/Graphrag-copilot?style=flat-square)](https://github.com/anothersunset/Graphrag-copilot/releases)
 
 </div>
+
+> 🚧 **v3.1 重构进行中** (2026-05-21 → 2026-07-16) — 本项目正在通过 **8 周渐进重构** 从 v1（已可跑 demo）升级到 v3.1（LangGraph 7 节点 Agentic RAG + 四路检索 + CRAG + Langfuse trace + RAGAS 评测 + MCP server）。当前 main 同时包含 v1 实现（`backend/` + `frontend/`）与 v3.1 重构骨架（`apps/`，建设中）。完整迁移决策见 **[ADR-0001](docs/adr/0001-from-v1-to-v3.1.md)**，8 周路线图见 **[migration-roadmap.md](docs/architecture/migration-roadmap.md)**，v3.1 完整技术规格见 **[v3.1-final-spec.md](docs/architecture/v3.1-final-spec.md)**。
 
 > 面向企业知识库的多模态 GraphRAG + Multi-Agent 检索增强生成系统
 
