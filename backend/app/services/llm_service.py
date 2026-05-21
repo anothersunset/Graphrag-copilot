@@ -2,8 +2,8 @@ from typing import List, Dict, Any, Generator
 from openai import OpenAI
 from config.settings import settings
 from app.utils.json_utils import extract_json_object
+from app.core.logger import logger
 import os
-import traceback
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -45,9 +45,8 @@ class LLMService:
                 max_tokens=kwargs.get("max_tokens", self.max_tokens),
             )
             return response.choices[0].message.content or ""
-        except Exception as e:
-            print("LLM 调用失败:", e)
-            traceback.print_exc()
+        except Exception:
+            logger.exception("LLM 调用失败")
             raise
 
     def chat_stream(self, messages: List[Dict[str, str]], **kwargs) -> Generator[str, None, None]:
@@ -65,8 +64,7 @@ class LLMService:
                 if delta and delta.content:
                     yield delta.content
         except Exception as e:
-            print("LLM 流式调用失败:", e)
-            traceback.print_exc()
+            logger.exception("LLM 流式调用失败")
             yield "\n\n[生成中断: " + str(e) + "]"
 
     def chat_json(self, messages: List[Dict[str, str]], **kwargs) -> Dict[str, Any]:

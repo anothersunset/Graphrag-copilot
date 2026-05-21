@@ -1,6 +1,6 @@
 from pathlib import Path
 from uuid import uuid4
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
 
 from app.api.schemas import (
@@ -11,6 +11,8 @@ from app.api.schemas import (
     GraphStatsResponse,
 )
 from app.core.constants import ALLOWED_EXTENSIONS
+from app.core.logger import logger
+from app.core.security import require_api_key
 from app.services.vector_store import vector_store, embedding_service
 from app.services.bm25_store import bm25_store
 from app.services.kg_service import kg_service
@@ -33,11 +35,16 @@ def _extract_entities_background(file_name: str, full_text: str):
         entities = extraction.get("entities", [])
         relations = extraction.get("relations", [])
         stats = kg_service.ingest_knowledge(entities, relations)
-        print(f"[BG] {file_name}: {stats.get('entities_created', 0)} entities, {stats.get('relations_created', 0)} relations")
-    except Exception as e:
-        print(f"[BG] Entity extraction failed for {file_name}: {e}")
+        logger.info(
+            "[BG] {}: {} entities, {} relations",
+            file_name,
+            stats.get("entities_created", 0),
+            stats.get("relations_created", 0),
+        )
+    except Exception:
+        logger.exception("[BG] Entity extraction failed for {}", file_name)
 
-@router.post("/documents/upload", response_model=DocumentResponse)
+@router.post("/documents/upload", response_model=DocumentResponse, dependencies=[Depends(require_api_key)])
 async def upload_document(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
     validate_upload_file(file)
 
@@ -58,6 +65,7 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
     try:
         doc_result = doc_parser.parse(str(file_path))
     except Exception as e:
+        logger.exception("Document parse failed: {}", file.filename)
         raise HTTPException(status_code=400, detail="Document parse failed: " + str(e))
 
     full_text = doc_result.get("content", {}).get("full_text", "")
@@ -84,9 +92,9 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
         vector_store.add_documents(documents, embeddings)
         bm25_store.add_documents(documents)
     except Exception as e:
+        logger.exception("Indexing failed for {}", file.filename)
         raise HTTPException(status_code=500, detail="Indexing failed: " + str(e))
 
-    # 实体抽取改为后台执行，不阻塞上传响应
     background_tasks.add_task(_extract_entities_background, file.filename, full_text)
 
     return DocumentResponse(
@@ -94,12 +102,12 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
         file_type=doc_result.get("file_type", suffix),
         content_length=len(full_text),
         chunks_created=len(chunks),
-        entities_extracted=0,  # 后台异步处理，响应中返回 0
+        entities_extracted=0,
         relations_extracted=0,
         document_hash=doc_result.get("file_hash"),
     )
 
-@router.post("/query", response_model=QueryResponse)
+@router.post("/query", response_model=QueryResponse, dependencies=[Depends(require_api_key)])
 async def query_knowledge(request: QueryRequest):
     try:
         result = orchestrator.process_query(request.query, top_k=request.top_k)
@@ -113,9 +121,10 @@ async def query_knowledge(request: QueryRequest):
             confidence=result.get("confidence", 0.0),
         )
     except Exception as e:
+        logger.exception("Query failed")
         raise HTTPException(status_code=500, detail="Query failed: " + str(e))
 
-@router.post("/query/stream")
+@router.post("/query/stream", dependencies=[Depends(require_api_key)])
 async def query_knowledge_stream(request: QueryRequest):
     """流式问答 SSE 端点 - 逐 token 返回"""
     import json
@@ -126,6 +135,7 @@ async def query_knowledge_stream(request: QueryRequest):
                 event_type = event.get("type", "message")
                 yield f"event: {event_type}\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
         except Exception as e:
+            logger.exception("Stream query failed")
             yield f"event: error\ndata: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
@@ -181,4 +191,6 @@ async def get_system_status():
         "vector_store": vector_store.get_stats(),
         "bm25_store": bm25_store.get_stats(),
         "graph_store": kg_service.get_stats(),
+        "auth_enabled": settings.ENABLE_AUTH,
+        "rate_limit_per_min": settings.RATE_LIMIT_PER_MIN,
     }
