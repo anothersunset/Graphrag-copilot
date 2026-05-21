@@ -36,4 +36,11 @@ def test_rewrite_at_cap_falls_back():
     )
     assert (
         route_after_evaluator(
-            {"crag
+            {"crag_decision": "rewrite", "rewrite_iteration": 5}
+        )
+        == "fallback"
+    )
+
+
+def test_missing_decision_defaults_to_fallback():
+    assert route_after_evaluator({}) == "fallback"

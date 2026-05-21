@@ -1,0 +1,75 @@
+# Local development infrastructure for GraphRAG Copilot v3.1.
+# Bring up:
+#   cp infra/docker/.env.example infra/docker/.env
+#   docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env up -d
+#
+# Services:
+#   qdrant       :6333 (HTTP) / :6334 (gRPC)   vector DB (W3)
+#   neo4j        :7474 (HTTP) / :7687 (Bolt)   knowledge graph (W3)
+#   langfuse     :3010                         trace UI (W5)
+#   langfuse-db  :5432                         postgres for langfuse
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: grc-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.20.0-community
+    container_name: grc-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/graphrag-copilot}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    restart: unless-stopped
+
+  langfuse-db:
+    image: postgres:16-alpine
+    container_name: grc-langfuse-db
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD:-langfuse-dev}
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse-db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  langfuse:
+    image: langfuse/langfuse:2.91.0
+    container_name: grc-langfuse
+    depends_on:
+      - langfuse-db
+    ports:
+      - "3010:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD:-langfuse-dev}@langfuse-db:5432/langfuse
+      NEXTAUTH_URL: http://localhost:3010
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-please-change-me-32chars-xxxxxxxxxx}
+      SALT: ${LANGFUSE_SALT:-please-change-me-32chars-xxxxxxxxxx}
+      TELEMETRY_ENABLED: "false"
+    restart: unless-stopped
+
+volumes:
+  qdrant-data:
+  neo4j-data:
+  neo4j-logs:
+  langfuse-db:
