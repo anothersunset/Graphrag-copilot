@@ -18,7 +18,8 @@ from typing import Any
 TokenCounter = Callable[[str], int]
 
 # CJK punctuation 。！？ + Latin sentence terminators
-_SENT_RE = re.compile(r"(?<=[。！？.!?\?\n])\s+")
+# Split AFTER sentence-ending punctuation (lookahead for next char or end)
+_SENT_RE = re.compile(r"(?<=[。！？.!?])")
 
 
 def _default_token_count(s: str) -> int:

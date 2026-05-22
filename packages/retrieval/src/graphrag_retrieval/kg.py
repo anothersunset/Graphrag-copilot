@@ -119,7 +119,7 @@ class KGRetriever:
                     "source": "kg",
                     "score": 1.0 / (i + 1),
                     "content": rendered,
-                    "metadata": {"depth": depth},
+                    "metadata": {"depth": depth, "relation": path_dict["rels"][0]["type"] if path_dict["rels"] else ""},
                     "path": path_dict,
                     "visited_node_ids": [n["id"] for n in path_dict["nodes"]],
                 }
@@ -177,7 +177,7 @@ class _StaticKGRetriever:
                     "source": "kg",
                     "score": 1.0 / (i + 1),
                     "content": rendered,
-                    "metadata": {"depth": path["depth"]},
+                    "metadata": {"depth": path["depth"], "relation": path["rels"][0]["type"] if path["rels"] else ""},
                     "path": path,
                     "visited_node_ids": [n["id"] for n in path["nodes"]],
                 }

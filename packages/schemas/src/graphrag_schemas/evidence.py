@@ -49,9 +49,9 @@ class GraphRel(BaseModel):
 class GraphPath(BaseModel):
     """A traversed multi-hop path from the KG retriever."""
 
+    depth: int
     nodes: list[GraphNode]
     rels: list[GraphRel]
-    depth: int
     rendered: str = ""  # natural-language rendering used as RetrievalHit.content
 
     @field_validator("rels")

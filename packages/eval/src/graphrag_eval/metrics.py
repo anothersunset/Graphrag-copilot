@@ -1,12 +1,14 @@
 """Custom GraphRAG-Copilot evaluation metrics.
 
 Four built-in metrics from v3.1:
-  - trace_completeness(run): every required node fired (planner,
+  - trace_completeness(audit): every required node fired (planner,
     retriever, evaluator, auditor, generator|fallback).
-  - tool_call_necessity(run): ∥tool calls∥ / ∥unique evidence∥ ∈ [0.9, 1.1].
-  - audit_coverage(audit_entries): one audit per node.
-  - crag_fix_rate(runs): fraction of pre-rewrite low-coverage runs that
-    post-rewrite cleared the use threshold.
+  - tool_call_necessity(tool_calls, audit): fraction of tool calls
+    that contributed to cited evidence.
+  - audit_coverage(audit, decisions): fraction of audit entries that
+    have corresponding decisions.
+  - crag_fix_rate(runs): fraction of pre-rewrite low-coverage runs
+    that post-rewrite cleared the use threshold.
 
 v3.2 adds:
   - provenance_sufficiency_score(...): scalar in [0,1]; re-export of
@@ -22,51 +24,74 @@ from .provenance import ProvenanceReport, provenance_sufficiency
 EXPECTED_NODES = ("planner", "retriever", "evaluator", "auditor")
 
 
-def trace_completeness(run: Mapping) -> float:
-    audit = run.get("audit") or []
+def trace_completeness(audit: Sequence[Mapping]) -> float:
+    """Fraction of expected nodes that appear in the audit trail.
+
+    Returns 1.0 when all EXPECTED_NODES are present. Otherwise returns
+    the fraction of expected nodes found (partial credit).
+    """
     fired = {a.get("node") for a in audit if isinstance(a, Mapping) or hasattr(a, "get")}
-    if not all(node in fired for node in EXPECTED_NODES):
-        return 0.0
-    if not ({"generator", "fallback"} & fired):
-        return 0.0
-    return 1.0
-
-
-def tool_call_necessity(run: Mapping) -> float:
-    tool_calls = run.get("tool_calls") or []
-    evidence = run.get("cited_chunk_ids") or run.get("fused_hits") or []
-    unique_evidence = {
-        e if isinstance(e, str) else (e.get("chunk_id") if hasattr(e, "get") else str(e))
-        for e in evidence
-    }
-    if not unique_evidence:
-        return 0.0
-    return round(len(tool_calls) / len(unique_evidence), 4)
-
-
-def audit_coverage(audit_entries: Sequence, *, required_nodes: Sequence[str] = EXPECTED_NODES) -> float:
-    fired = Counter()
-    for entry in audit_entries:
-        node = entry.get("node") if isinstance(entry, Mapping) else getattr(entry, "node", None)
-        if node:
-            fired[node] += 1
-    if not required_nodes:
+    if not EXPECTED_NODES:
         return 1.0
-    hit = sum(1 for n in required_nodes if fired[n] >= 1)
-    return round(hit / len(required_nodes), 4)
+    hit = sum(1 for n in EXPECTED_NODES if n in fired)
+    return hit / len(EXPECTED_NODES)
+
+
+def tool_call_necessity(tool_calls: Sequence, audit: Sequence[Mapping]) -> float:
+    """Fraction of tool calls whose output was cited in the audit.
+
+    Returns 1.0 when there are no tool calls (vacuously true).
+    """
+    if not tool_calls:
+        return 1.0
+    # Collect all cited tool names from audit entries
+    cited: set[str] = set()
+    for entry in audit:
+        detail = entry.get("detail") or {}
+        cited_tools = detail.get("cited_tools") or []
+        cited.update(cited_tools)
+    tool_names = {t.get("name") if isinstance(t, Mapping) else str(t) for t in tool_calls}
+    if not tool_names:
+        return 1.0
+    return round(len(cited & tool_names) / len(tool_names), 4)
+
+
+def audit_coverage(
+    audit: Sequence[Mapping],
+    decisions: Sequence[Mapping] | None = None,
+    *,
+    required_nodes: Sequence[str] = EXPECTED_NODES,
+) -> float:
+    """Fraction of audit entries that have corresponding decisions.
+
+    If ``decisions`` is None, returns 1.0 when ``audit`` is empty.
+    """
+    if not decisions:
+        return 1.0
+    audit_nodes = {a.get("node") for a in audit if isinstance(a, Mapping)}
+    decision_nodes = {d.get("node") for d in decisions if isinstance(d, Mapping)}
+    if not decision_nodes:
+        return 1.0
+    hit = sum(1 for n in decision_nodes if n in audit_nodes)
+    return round(hit / len(decision_nodes), 4)
 
 
 def crag_fix_rate(runs: Iterable[Mapping]) -> float:
+    """Fraction of rewrite runs that recovered to 'use' decision.
+
+    Only counts runs with ``rewrite_iterations > 0``.
+    """
     pre_low = 0
     fixed = 0
     for r in runs:
-        if (r.get("pre_rewrite_decision") or "").lower() == "rewrite":
+        rewrite_iters = r.get("rewrite_iterations", 0)
+        if rewrite_iters > 0:
             pre_low += 1
-            if (r.get("post_rewrite_decision") or "").lower() == "use":
+            if (r.get("final_decision") or "").lower() == "use":
                 fixed += 1
     if pre_low == 0:
         return 0.0
-    return round(fixed / pre_low, 4)
+    return fixed / pre_low
 
 
 def provenance_sufficiency_score(

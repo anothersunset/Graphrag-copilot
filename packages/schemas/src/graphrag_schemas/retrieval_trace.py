@@ -1,90 +1,136 @@
-"""RetrievalTrace — the structural backbone of every retrieval in graphrag-copilot.
-
-Every call to any retriever (vector, BM25, KG, web) MUST emit a RetrievalStep,
-and every full LangGraph run MUST emit one RetrievalTrace summarizing all steps.
-This is the audit trail surfaced to the user via the React Flow visualization
-(W7) and ingested by Langfuse (W5).
-
-Invariant: ``Trace Completeness = 1.00`` means every span in the run produced
-a step in this trace. Enforced in tests/test_retrieval_trace.py.
-"""
+"""Retrieval trace and CRAG decision schemas."""
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
-from enum import StrEnum
+from enum import Enum
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, field_validator
 
 
-class RetrieverKind(StrEnum):
-    """The four retrievers in the v3.1 hybrid stack."""
+class RetrieverKind(str, Enum):
+    """Supported retriever backends."""
 
-    VECTOR = "vector"  # Qdrant + Contextual Retrieval
-    BM25 = "bm25"  # rank_bm25 + jieba
-    KG = "kg"  # Neo4j 3-hop subgraph
-    WEB = "web"  # Tavily / SerpAPI fallback (CRAG)
+    VECTOR = "vector"
+    BM25 = "bm25"
+    KG = "kg"
+    WEB = "web"
+
+
+class ToolKind(str, Enum):
+    """Categories of tool invocations."""
+
+    RETRIEVAL = "retrieval"
+    RERANK = "rerank"
+    GENERATION = "generation"
+    AUDIT = "audit"
 
 
 class RetrievalStep(BaseModel):
-    """A single retrieval call from one of the four retrievers."""
+    """A single retriever invocation within a trace."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = {"frozen": True}
 
-    step_id: UUID = Field(default_factory=uuid4)
     parent_trace_id: UUID
     retriever: RetrieverKind
     query: str
-    rewritten_query: str | None = Field(
-        default=None,
-        description="Set when CRAG rewrites the query before this step.",
-    )
-    top_k: int = Field(ge=1, le=200)
+    top_k: int
     started_at: datetime
     finished_at: datetime
-    latency_ms: float = Field(ge=0)
-    result_ids: list[str] = Field(
-        default_factory=list,
-        description="Document or node IDs returned, in rank order.",
-    )
-    scores: list[float] = Field(
-        default_factory=list,
-        description="Per-result relevance scores (raw, pre-rerank).",
-    )
+    latency_ms: float
+    hit_count: int = 0
     error: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RetrievalTrace(BaseModel):
-    """Aggregate trace for one user query → final answer."""
+    """Full trace of a retrieval pass across all retrievers."""
 
-    model_config = ConfigDict(frozen=True)
-
-    trace_id: UUID = Field(default_factory=uuid4)
+    trace_id: UUID
     session_id: UUID
     user_query: str
     started_at: datetime
     finished_at: datetime
-    total_latency_ms: float = Field(ge=0)
+    total_latency_ms: float
     steps: list[RetrievalStep] = Field(default_factory=list)
-    final_answer: str | None = None
-    answer_citations: list[str] = Field(default_factory=list)
-    langfuse_trace_url: str | None = None
 
     @property
     def is_complete(self) -> bool:
-        """Trace Completeness invariant: at least one step, all steps parented correctly.
-
-        W5 RAGAS enforces this as part of the *Trace Completeness = 1.00* SLO.
-        """
-        return (
-            len(self.steps) > 0
-            and all(step.parent_trace_id == self.trace_id for step in self.steps)
-            and self.finished_at >= self.started_at
-        )
+        """All steps must belong to this trace."""
+        return all(s.parent_trace_id == self.trace_id for s in self.steps)
 
     def by_retriever(self, kind: RetrieverKind) -> list[RetrievalStep]:
-        """All steps from a given retriever, preserving order."""
-        return [s for s in self.steps if s.retriever == kind]
+        """Return steps filtered by retriever kind."""
+        return [s for s in self.steps if s.retriever is kind]
+
+
+class CRAGBranch(str, Enum):
+    """CRAG routing branches."""
+
+    USE = "use"
+    REWRITE = "rewrite"
+    FALLBACK = "fallback"
+
+
+class CRAGDecision(BaseModel):
+    """A CRAG routing decision with provenance."""
+
+    model_config = {"frozen": True}
+
+    parent_trace_id: UUID
+    branch: CRAGBranch
+    confidence_score: float
+    reasoning: str
+    rewrite_count: int = 0
+
+    @classmethod
+    def from_score(
+        cls,
+        parent_trace_id: UUID,
+        confidence_score: float,
+        reasoning: str,
+        rewrite_count: int = 0,
+        use_threshold: float = 0.7,
+        rewrite_threshold: float = 0.3,
+        max_rewrites: int = 2,
+    ) -> CRAGDecision:
+        """Derive branch from score and rewrite count."""
+        if rewrite_count >= max_rewrites:
+            branch = CRAGBranch.FALLBACK
+        elif confidence_score >= use_threshold:
+            branch = CRAGBranch.USE
+        elif confidence_score >= rewrite_threshold:
+            branch = CRAGBranch.REWRITE
+        else:
+            branch = CRAGBranch.FALLBACK
+        return cls(
+            parent_trace_id=parent_trace_id,
+            branch=branch,
+            confidence_score=confidence_score,
+            reasoning=reasoning,
+            rewrite_count=rewrite_count,
+        )
+
+
+_SNAKE_CASE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+class ToolSpec(BaseModel):
+    """Declarative spec for a tool exposed via MCP or internal registry."""
+
+    model_config = {"frozen": True}
+
+    name: str
+    kind: ToolKind
+    description: str
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    output_schema: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("name")
+    @classmethod
+    def _name_must_be_snake_case(cls, v: str) -> str:
+        if not _SNAKE_CASE_RE.match(v):
+            raise ValueError(f"Tool name {v!r} must be lowercase snake_case")
+        return v
