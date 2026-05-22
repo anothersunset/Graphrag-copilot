@@ -1,19 +1,40 @@
 """RetrievalTraceExporter shape correctness."""
+
 from __future__ import annotations
 
 from graphrag_api.trace.retrieval_trace import RetrievalTraceExporter
 
-
 HITS = [
     {"chunk_id": "a", "source": "vector", "score": 0.9, "content": "ca", "metadata": {"page": 1}},
     {"chunk_id": "b", "source": "vector", "score": 0.5, "content": "cb", "metadata": {}},
-    {"chunk_id": "a", "source": "bm25",   "score": 0.7, "content": "ca", "metadata": {}},
-    {"chunk_id": "c", "source": "bm25",   "score": 0.4, "content": "cc", "metadata": {}},
+    {"chunk_id": "a", "source": "bm25", "score": 0.7, "content": "ca", "metadata": {}},
+    {"chunk_id": "c", "source": "bm25", "score": 0.4, "content": "cc", "metadata": {}},
 ]
 FUSED = [
-    {"chunk_id": "a", "source": "vector", "score": 0.05, "rerank_score": 0.92, "content": "ca", "metadata": {}},
-    {"chunk_id": "b", "source": "vector", "score": 0.03, "rerank_score": 0.41, "content": "cb", "metadata": {}},
-    {"chunk_id": "c", "source": "bm25",   "score": 0.02, "rerank_score": 0.20, "content": "cc", "metadata": {}},
+    {
+        "chunk_id": "a",
+        "source": "vector",
+        "score": 0.05,
+        "rerank_score": 0.92,
+        "content": "ca",
+        "metadata": {},
+    },
+    {
+        "chunk_id": "b",
+        "source": "vector",
+        "score": 0.03,
+        "rerank_score": 0.41,
+        "content": "cb",
+        "metadata": {},
+    },
+    {
+        "chunk_id": "c",
+        "source": "bm25",
+        "score": 0.02,
+        "rerank_score": 0.20,
+        "content": "cc",
+        "metadata": {},
+    },
 ]
 
 

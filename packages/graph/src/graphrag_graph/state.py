@@ -4,6 +4,7 @@ State is a ``TypedDict`` because LangGraph 0.2.x reducers operate on dict-like
 state by default. Lists that should accumulate across nodes use
 ``Annotated[list[X], operator.add]``; scalars are replaced on each return.
 """
+
 from __future__ import annotations
 
 from operator import add
@@ -107,9 +108,7 @@ class GraphState(TypedDict, total=False):
     error: str | None
 
 
-def initial_state(
-    question: str, *, session_id: str = "", trace_id: str = ""
-) -> GraphState:
+def initial_state(question: str, *, session_id: str = "", trace_id: str = "") -> GraphState:
     """Convenience constructor for the minimal valid input state."""
     import uuid
 

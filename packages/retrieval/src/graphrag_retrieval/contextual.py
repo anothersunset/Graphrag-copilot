@@ -8,12 +8,14 @@ retrieval failures.
 
 The LLM client is dependency-injected (anything exposing ``chat()``).
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

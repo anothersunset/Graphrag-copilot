@@ -1,4 +1,5 @@
 """Generator node — LiteLLM + Instructor structured answer with citations."""
+
 from __future__ import annotations
 
 import logging
@@ -19,9 +20,7 @@ SYSTEM_PROMPT = (
 )
 
 
-def generator_node(
-    state: GraphState, config: dict[str, Any] | None = None
-) -> dict[str, Any]:
+def generator_node(state: GraphState, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
     llm = cfg.get("llm_client")
     model = cfg.get("generator_model", "openai/gpt-4o-mini")
@@ -34,8 +33,7 @@ def generator_node(
     for i, h in enumerate(fused):
         score = h.get("rerank_score") or h.get("score") or 0.0
         evidence_lines.append(
-            f"[chunk:{i + 1}] (source={h.get('source')}, score={score:.3f})\n"
-            f"{h.get('content', '')}"
+            f"[chunk:{i + 1}] (source={h.get('source')}, score={score:.3f})\n{h.get('content', '')}"
         )
     evidence_block = "\n\n".join(evidence_lines) or "(no evidence)"
 

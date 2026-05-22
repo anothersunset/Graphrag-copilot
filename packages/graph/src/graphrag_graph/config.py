@@ -1,4 +1,5 @@
 """Configuration for the v3.1 LangGraph orchestrator."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

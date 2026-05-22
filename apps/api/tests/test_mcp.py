@@ -1,4 +1,5 @@
 """ToolSpec registry shape."""
+
 from __future__ import annotations
 
 from graphrag_api.mcp.tools import TOOL_REGISTRY

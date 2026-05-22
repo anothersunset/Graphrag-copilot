@@ -5,9 +5,11 @@ implementations live in ``packages/retrieval``, ``packages/kg``, and the
 application layer respectively. Nodes depend on these Protocols so they can
 be unit-tested with fakes.
 """
+
 from __future__ import annotations
 
-from typing import Any, Protocol, Sequence, runtime_checkable
+from collections.abc import Sequence
+from typing import Any, Protocol, runtime_checkable
 
 from .state import Citation, RetrievalHit
 
@@ -18,8 +20,7 @@ class Retriever(Protocol):
 
     name: str  # one of {"vector", "bm25", "kg", "web"}
 
-    def retrieve(self, query: str, *, top_k: int) -> list[RetrievalHit]:
-        ...
+    def retrieve(self, query: str, *, top_k: int) -> list[RetrievalHit]: ...
 
 
 @runtime_checkable
@@ -28,8 +29,7 @@ class Reranker(Protocol):
 
     def rerank(
         self, query: str, hits: Sequence[RetrievalHit], *, top_k: int
-    ) -> list[RetrievalHit]:
-        ...
+    ) -> list[RetrievalHit]: ...
 
 
 @runtime_checkable
@@ -44,24 +44,21 @@ class LLMClient(Protocol):
         user: str,
         response_schema: type | None = None,
         timeout_s: float = 30.0,
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
 
 @runtime_checkable
 class CragScorer(Protocol):
     """Pluggable CRAG scoring strategy (W4 lands DSPy version)."""
 
-    def score(self, question: str, hits: Sequence[RetrievalHit]) -> float:
-        ...
+    def score(self, question: str, hits: Sequence[RetrievalHit]) -> float: ...
 
 
 @runtime_checkable
 class QueryRewriter(Protocol):
     """Pluggable query rewrite strategy."""
 
-    def rewrite(self, question: str, *, prior_rewrites: Sequence[str]) -> str:
-        ...
+    def rewrite(self, question: str, *, prior_rewrites: Sequence[str]) -> str: ...
 
 
 @runtime_checkable
@@ -70,5 +67,4 @@ class AuditorClient(Protocol):
 
     def audit(
         self, *, question: str, answer: str, citations: Sequence[Citation]
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...

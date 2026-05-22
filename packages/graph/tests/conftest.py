@@ -1,10 +1,11 @@
 """Pytest fixtures: fake retrievers, fake LLM, fake auditor, fake scorer."""
+
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import pytest
-
 from graphrag_graph.state import Citation, RetrievalHit
 
 
@@ -18,12 +19,8 @@ class FakeRetriever:
 
 
 class FakeReranker:
-    def rerank(
-        self, query: str, hits: Sequence[RetrievalHit], *, top_k: int
-    ) -> list[RetrievalHit]:
-        ranked = sorted(hits, key=lambda h: h.get("score", 0.0), reverse=True)[
-            :top_k
-        ]
+    def rerank(self, query: str, hits: Sequence[RetrievalHit], *, top_k: int) -> list[RetrievalHit]:
+        ranked = sorted(hits, key=lambda h: h.get("score", 0.0), reverse=True)[:top_k]
         for i, h in enumerate(ranked):
             h["rerank_score"] = h.get("score", 0.0) + 0.01 * (top_k - i)
         return list(ranked)
@@ -74,9 +71,7 @@ class FakeRewriter:
     def __init__(self, suffix: str = "?"):
         self.suffix = suffix
 
-    def rewrite(
-        self, question: str, *, prior_rewrites: Sequence[str]
-    ) -> str:
+    def rewrite(self, question: str, *, prior_rewrites: Sequence[str]) -> str:
         base = prior_rewrites[-1] if prior_rewrites else question
         return f"{base} {self.suffix}"
 

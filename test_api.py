@@ -13,9 +13,10 @@
   BASE_URL=http://localhost:8000 API_KEY=test-key-1 ENABLE_AUTH=true \
       RATE_LIMIT_PER_MIN=5 python test_api.py
 """
+
 import os
 import sys
-from typing import Callable, List, Tuple
+from collections.abc import Callable
 
 import requests
 
@@ -129,7 +130,7 @@ def test_rate_limit_returns_429() -> bool:
     if RATE_LIMIT <= 0 or RATE_LIMIT > 200:
         print("   -> 跳过（设置超出合理范围）")
         return True
-    statuses: List[int] = []
+    statuses: list[int] = []
     for _ in range(RATE_LIMIT + 2):
         try:
             statuses.append(requests.get(BASE_URL + "/health", timeout=5).status_code)
@@ -149,7 +150,7 @@ def main() -> int:
     print("RATE_LIMIT=", RATE_LIMIT, "/ min")
     print("=" * 60)
 
-    tests: List[Tuple[str, Callable[[], bool]]] = [
+    tests: list[tuple[str, Callable[[], bool]]] = [
         ("健康检查", test_health),
         ("系统状态", test_system_status),
         ("向量统计", test_vector_stats),
@@ -162,11 +163,11 @@ def main() -> int:
     ]
 
     passed = 0
-    failures: List[str] = []
+    failures: list[str] = []
     for name, fn in tests:
         try:
             ok = fn()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print("   -> ERROR", exc)
             ok = False
         if ok:

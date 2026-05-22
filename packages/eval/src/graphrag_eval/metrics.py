@@ -19,13 +19,13 @@ from typing import Iterable, Mapping, Sequence
 
 from .provenance import ProvenanceReport, provenance_sufficiency
 
-_REQUIRED_NODES = ("planner", "retriever", "evaluator", "auditor")
+EXPECTED_NODES = ("planner", "retriever", "evaluator", "auditor")
 
 
 def trace_completeness(run: Mapping) -> float:
     audit = run.get("audit") or []
     fired = {a.get("node") for a in audit if isinstance(a, Mapping) or hasattr(a, "get")}
-    if not all(node in fired for node in _REQUIRED_NODES):
+    if not all(node in fired for node in EXPECTED_NODES):
         return 0.0
     if not ({"generator", "fallback"} & fired):
         return 0.0
@@ -44,7 +44,7 @@ def tool_call_necessity(run: Mapping) -> float:
     return round(len(tool_calls) / len(unique_evidence), 4)
 
 
-def audit_coverage(audit_entries: Sequence, *, required_nodes: Sequence[str] = _REQUIRED_NODES) -> float:
+def audit_coverage(audit_entries: Sequence, *, required_nodes: Sequence[str] = EXPECTED_NODES) -> float:
     fired = Counter()
     for entry in audit_entries:
         node = entry.get("node") if isinstance(entry, Mapping) else getattr(entry, "node", None)
@@ -89,6 +89,7 @@ def provenance_sufficiency_score(
 
 
 __all__ = [
+    "EXPECTED_NODES",
     "trace_completeness",
     "tool_call_necessity",
     "audit_coverage",

@@ -1,9 +1,8 @@
 """EvidencePack + GraphPath model validation."""
+
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from graphrag_schemas.evidence import (
     ChunkEvidence,
     EvidencePack,
@@ -11,14 +10,12 @@ from graphrag_schemas.evidence import (
     GraphPath,
     GraphRel,
 )
+from pydantic import ValidationError
 
 
 def _path(depth: int = 2) -> GraphPath:
     nodes = [GraphNode(id=f"n{i}", name=f"N{i}") for i in range(depth + 1)]
-    rels = [
-        GraphRel(source_id=f"n{i}", target_id=f"n{i + 1}", type="R")
-        for i in range(depth)
-    ]
+    rels = [GraphRel(source_id=f"n{i}", target_id=f"n{i + 1}", type="R") for i in range(depth)]
     return GraphPath(nodes=nodes, rels=rels, depth=depth)
 
 

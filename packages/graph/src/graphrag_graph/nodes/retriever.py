@@ -3,6 +3,7 @@
 W2 skeleton: synchronous fan-out. W3 switches to ``asyncio.gather`` over the
 four-route retrievers and adds BGE-Reranker-v2-m3 inline.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,9 +15,7 @@ from ..state import GraphState, RetrievalHit
 logger = logging.getLogger(__name__)
 
 
-def retriever_node(
-    state: GraphState, config: dict[str, Any] | None = None
-) -> dict[str, Any]:
+def retriever_node(state: GraphState, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
     question = state["question"]
     rewrites = state.get("query_rewrites", [])
@@ -35,9 +34,7 @@ def retriever_node(
         name = tool.replace("retrieve_", "")
         r = retrievers.get(name)
         if r is None:
-            logger.debug(
-                "retriever: no implementation registered for %s; skipping", name
-            )
+            logger.debug("retriever: no implementation registered for %s; skipping", name)
             continue
         started = now_iso()
         try:
@@ -54,7 +51,7 @@ def retriever_node(
                 }
             )
             all_hits.extend(hits)
-        except Exception as exc:  # noqa: BLE001 — bubble into trace
+        except Exception as exc:
             logger.exception("retriever: %s failed", name)
             tool_calls.append(
                 {
@@ -72,9 +69,7 @@ def retriever_node(
     if reranker is not None and merged:
         fused = reranker.rerank(query, merged, top_k=top_k_rerank)
     else:
-        fused = sorted(merged, key=lambda h: h.get("score", 0.0), reverse=True)[
-            :top_k_rerank
-        ]
+        fused = sorted(merged, key=lambda h: h.get("score", 0.0), reverse=True)[:top_k_rerank]
 
     audit = {
         "node": "retriever",

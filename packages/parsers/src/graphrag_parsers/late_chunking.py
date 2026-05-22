@@ -7,10 +7,12 @@ chunk embeddings that carry full-document context.
 This module produces the chunk-boundary token spans; the actual long-
 context encoder + pooling is dependency-injected so we can swap models.
 """
+
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 from .chunker import ChunkRecord, SemanticChunker
 

@@ -1,4 +1,5 @@
 """SemanticChunker correctness."""
+
 from __future__ import annotations
 
 from graphrag_parsers.chunker import SemanticChunker

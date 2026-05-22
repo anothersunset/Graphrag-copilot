@@ -1,9 +1,11 @@
 """Qdrant-backed dense retriever using bge-large-zh-v1.5 embeddings."""
+
 from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from .base import RetrievalHit
 
@@ -98,7 +100,7 @@ class VectorRetriever:
         }
 
     @classmethod
-    def from_hits(cls, hits: Sequence[RetrievalHit]) -> "_StaticVectorRetriever":
+    def from_hits(cls, hits: Sequence[RetrievalHit]) -> _StaticVectorRetriever:
         """Construct a test-only retriever that returns a fixed list."""
         return _StaticVectorRetriever(hits)
 

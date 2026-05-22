@@ -1,4 +1,5 @@
 """FastMCP server wiring — mounted under /v1/mcp by app.py."""
+
 from __future__ import annotations
 
 import logging
@@ -34,9 +35,7 @@ def _register_tool(mcp: Any, spec: ToolSpec, *, orchestrator: Any) -> None:
 
     async def _handler(**kwargs):
         if name.startswith("search."):
-            return {
-                "hits": _stub_hits(query=kwargs.get("query", ""), source=name.split(".", 1)[1])
-            }
+            return {"hits": _stub_hits(query=kwargs.get("query", ""), source=name.split(".", 1)[1])}
         if name == "orchestrate.ask" and orchestrator is not None:
             return orchestrator.invoke({"query": kwargs.get("query", "")})
         return {"answer": "stub", "audit": [], "retrieval_trace": [], "tool_calls": []}

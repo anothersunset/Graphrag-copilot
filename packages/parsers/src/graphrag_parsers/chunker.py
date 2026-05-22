@@ -6,12 +6,14 @@ with N-token overlap between consecutive chunks. The token counter is
 dependency-injected: pass a tiktoken encoder for production accuracy, or
 rely on the default whitespace-and-CJK-char heuristic for tests.
 """
+
 from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator
+from typing import Any
 
 TokenCounter = Callable[[str], int]
 

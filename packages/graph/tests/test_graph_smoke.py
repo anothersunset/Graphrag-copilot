@@ -1,4 +1,5 @@
 """End-to-end smoke test: graph runs and produces an answer."""
+
 from __future__ import annotations
 
 from graphrag_graph import GraphConfig, build_graph, initial_state

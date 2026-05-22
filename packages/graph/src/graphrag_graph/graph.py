@@ -9,6 +9,7 @@ Topology::
               │           └─────────────────────────┘
               └──────────────────────────[fallback]→ fallback → END
 """
+
 from __future__ import annotations
 
 from functools import partial

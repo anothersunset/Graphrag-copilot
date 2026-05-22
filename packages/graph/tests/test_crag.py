@@ -1,8 +1,8 @@
 """CragScorer boundary + decision-mapping tests."""
+
 from __future__ import annotations
 
 import pytest
-
 from graphrag_graph.crag import CragScorer
 
 

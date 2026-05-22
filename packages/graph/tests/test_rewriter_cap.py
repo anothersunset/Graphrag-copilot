@@ -1,4 +1,5 @@
 """Rewriter loop is capped at max_rewrites (locked v3.1 value: 2)."""
+
 from __future__ import annotations
 
 from graphrag_graph import GraphConfig, build_graph, initial_state

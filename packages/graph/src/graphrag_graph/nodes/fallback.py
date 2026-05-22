@@ -1,4 +1,5 @@
 """Fallback node — low-confidence response with explicit caveat."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -7,9 +8,7 @@ from .._utils import digest, now_iso
 from ..state import GraphState
 
 
-def fallback_node(
-    state: GraphState, config: dict[str, Any] | None = None
-) -> dict[str, Any]:
+def fallback_node(state: GraphState, config: dict[str, Any] | None = None) -> dict[str, Any]:
     question = state["question"]
     score = float(state.get("crag_score", 0.0))
     n_hits = len(state.get("fused_hits", []))

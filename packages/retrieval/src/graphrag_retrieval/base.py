@@ -1,7 +1,9 @@
 """Retrieval base types + Reciprocal Rank Fusion."""
+
 from __future__ import annotations
 
-from typing import Any, Iterable, Literal, Protocol, Sequence, TypedDict, runtime_checkable
+from collections.abc import Iterable, Sequence
+from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 
 Source = Literal["vector", "bm25", "kg", "web"]
 
@@ -31,8 +33,7 @@ class AsyncRetriever(Protocol):
 
     name: Source
 
-    async def aretrieve(self, query: str, *, top_k: int) -> list[RetrievalHit]:
-        ...
+    async def aretrieve(self, query: str, *, top_k: int) -> list[RetrievalHit]: ...
 
 
 def rrf_fuse(

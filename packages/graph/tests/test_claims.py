@@ -1,4 +1,5 @@
 """Sentence-level claim model + heuristics."""
+
 from __future__ import annotations
 
 import json
@@ -44,9 +45,7 @@ def test_coerce_claims_accepts_dicts():
 
 
 def test_coerce_claims_accepts_json_string():
-    raw = json.dumps(
-        [{"text": "X.", "evidence_ids": ["c1"], "support": "supported"}]
-    )
+    raw = json.dumps([{"text": "X.", "evidence_ids": ["c1"], "support": "supported"}])
     claims = coerce_claims(raw)
     assert claims[0].text == "X."
     assert claims[0].evidence_ids == ["c1"]
@@ -60,7 +59,10 @@ def test_coerce_claims_accepts_strings_and_marks_unsupported():
 
 def test_heuristic_claims_matches_via_token_overlap():
     contexts = [
-        {"chunk_id": "c1", "content": "GraphRAG combines vector retrieval and knowledge graph traversal."},
+        {
+            "chunk_id": "c1",
+            "content": "GraphRAG combines vector retrieval and knowledge graph traversal.",
+        },
         {"chunk_id": "c2", "content": "Neo4j is a graph database queried by Cypher."},
     ]
     answer = (

@@ -1,4 +1,5 @@
 """GraphRAG Copilot v3.1 — LangGraph 7-node Agentic RAG orchestrator."""
+
 from .config import CragThresholds, GraphConfig
 from .contracts import (
     AuditorClient,
@@ -34,7 +35,7 @@ __all__ = [
     "RetrievalHit",
     "Retriever",
     "ToolCall",
+    "__version__",
     "build_graph",
     "initial_state",
-    "__version__",
 ]

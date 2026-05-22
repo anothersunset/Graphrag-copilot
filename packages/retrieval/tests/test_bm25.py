@@ -1,13 +1,12 @@
 """BM25 retrieval + persistence smoke tests."""
+
 from __future__ import annotations
 
 import asyncio
 from pathlib import Path
 
 import pytest
-
 from graphrag_retrieval.bm25 import BM25Document, BM25Retriever
-
 
 DOCS = [
     BM25Document(

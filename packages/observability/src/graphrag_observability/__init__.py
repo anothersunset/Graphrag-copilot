@@ -1,4 +1,5 @@
 """Tracing + audit export for GraphRAG Copilot v3.1."""
+
 from .langfuse_tracer import LangfuseTracer, NoopTracer, get_tracer
 from .spans import AuditExporter, NodeSpan
 

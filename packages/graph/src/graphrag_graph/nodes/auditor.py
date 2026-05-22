@@ -4,16 +4,17 @@ v3.2: also emits sentence-level ``claims`` (each sentence -> evidence
 ids). If DSPy didn't return them, we build them heuristically from the
 answer + retrieval context using token overlap.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ..claims import Claim, heuristic_claims
-from ..contracts import AuditEntry
 from ..dspy_auditor import DSPyAuditor
+from ..state import AuditEntry
 
 
-def auditor(state: dict, *, config: dict | None = None) -> dict:
+def auditor_node(state: dict, *, config: dict | None = None) -> dict:
     config = config or {}
     dspy_auditor: DSPyAuditor | None = config.get("dspy_auditor")
     fused = state.get("fused_hits") or state.get("hits") or []
@@ -59,7 +60,7 @@ def auditor(state: dict, *, config: dict | None = None) -> dict:
     unsupported = sum(1 for c in claims if not c.is_supported())
     audit = AuditEntry(
         node="auditor",
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         summary=f"verdict={verdict_str} cited={len(cited)} claims={len(claims)} unsupported={unsupported}",
         detail={
             "verdict": verdict_str,
