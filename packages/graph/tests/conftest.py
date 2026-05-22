@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import pytest
+from graphrag_graph.crag import CragResult
 from graphrag_graph.state import Citation, RetrievalHit
 
 
@@ -60,11 +61,33 @@ class FakeAuditor:
 
 
 class FakeCragScorer:
-    def __init__(self, score: float):
-        self.score_value = score
+    """Test double that mirrors the real ``CragScorer.score`` return shape.
 
-    def score(self, question: str, hits: Sequence[RetrievalHit]) -> float:
-        return self.score_value
+    Pass ``decision`` to force a routing branch; otherwise the decision
+    is derived from ``score`` using the locked v3.1 thresholds
+    (>=0.7 use, >=0.3 rewrite, else fallback).
+    """
+
+    def __init__(self, score: float, decision: str | None = None):
+        self.score_value = score
+        self._decision = decision
+
+    def score(self, query: str, hits: Sequence[RetrievalHit]) -> CragResult:
+        if self._decision is not None:
+            decision = self._decision
+        elif self.score_value >= 0.7:
+            decision = "use"
+        elif self.score_value >= 0.3:
+            decision = "rewrite"
+        else:
+            decision = "fallback"
+        return CragResult(
+            score=self.score_value,
+            decision=decision,
+            relevance=self.score_value,
+            coverage=self.score_value,
+            detail={"fake": True, "k": len(list(hits))},
+        )
 
 
 class FakeRewriter:
