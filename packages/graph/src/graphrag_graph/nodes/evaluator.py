@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from ..crag import CragScorer
-from ..state import AuditEntry
 
 
 def evaluator_node(state: dict, *, config: dict | None = None) -> dict:
@@ -13,19 +12,22 @@ def evaluator_node(state: dict, *, config: dict | None = None) -> dict:
     config = config or {}
     scorer: CragScorer = config.get("crag_scorer") or CragScorer()
     hits = state.get("fused_hits") or state.get("hits") or []
-    result = scorer.score(state.get("query", ""), hits)
+    # state key is ``question`` (see state.py); ``query`` kept as a
+    # backwards-compatible fallback in case a caller mutated state.
+    query = state.get("question", "") or state.get("query", "")
+    result = scorer.score(query, hits)
 
-    audit = AuditEntry(
-        node="evaluator",
-        timestamp=datetime.now(UTC).isoformat(),
-        summary=f"CRAG decision={result.decision} score={result.score:.3f}",
-        detail={
-            "score": result.score,
-            "relevance": result.relevance,
-            "coverage": result.coverage,
-            **result.detail,
-        },
-    )
+    audit = {
+        "node": "evaluator",
+        "decision": result.decision,
+        "rationale": (
+            f"CRAG score={result.score:.3f} "
+            f"relevance={result.relevance:.3f} coverage={result.coverage:.3f}"
+        ),
+        "inputs_digest": "",
+        "outputs_digest": "",
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
     return {
         "crag_score": result.score,
         "crag_decision": result.decision,
