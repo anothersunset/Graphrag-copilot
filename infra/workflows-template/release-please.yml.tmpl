@@ -1,0 +1,27 @@
+# Templated release-please workflow.
+# Render with: make ci-activate  (or bash scripts/install-workflows.sh)
+# Sentinels (__GHA_OPEN__ / __GHA_CLOSE__) are replaced with \$X.
+
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-please-__GHA_OPEN__ github.ref __GHA_CLOSE__
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: __GHA_OPEN__ secrets.GITHUB_TOKEN __GHA_CLOSE__
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

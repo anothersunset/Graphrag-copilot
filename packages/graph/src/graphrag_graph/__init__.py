@@ -1,9 +1,40 @@
-"""graphrag-graph — LangGraph orchestrator (W2 will fill).
-
-Planned 7-node DAG:
-  Planner → Retriever → Evaluator → (CRAG branch) → Synthesizer → Auditor → Responder
-
-With persistent checkpointer (SQLite → Postgres in W6).
-"""
+"""GraphRAG Copilot v3.1 — LangGraph 7-node Agentic RAG orchestrator."""
+from .config import CragThresholds, GraphConfig
+from .contracts import (
+    AuditorClient,
+    CragScorer,
+    LLMClient,
+    QueryRewriter,
+    Reranker,
+    Retriever,
+)
+from .graph import build_graph
+from .state import (
+    AuditEntry,
+    Citation,
+    GraphState,
+    RetrievalHit,
+    ToolCall,
+    initial_state,
+)
 
 __version__ = "0.1.0"
+
+__all__ = [
+    "AuditEntry",
+    "AuditorClient",
+    "Citation",
+    "CragScorer",
+    "CragThresholds",
+    "GraphConfig",
+    "GraphState",
+    "LLMClient",
+    "QueryRewriter",
+    "Reranker",
+    "RetrievalHit",
+    "Retriever",
+    "ToolCall",
+    "build_graph",
+    "initial_state",
+    "__version__",
+]
