@@ -12,7 +12,6 @@ Topology::
 
 from __future__ import annotations
 
-from functools import partial
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
@@ -64,18 +63,24 @@ def build_graph(
         "reranker": reranker,
         "llm_client": llm_client,
         "auditor_client": auditor_client,
+        "dspy_auditor": auditor_client,
         "crag_scorer": crag_scorer,
         "query_rewriter": query_rewriter,
     }
 
+    # NOTE: We use closures instead of ``functools.partial(node, config=node_cfg)``
+    # because LangGraph 0.2.x introspects node signatures for a ``config`` param
+    # and passes its own RunnableConfig, silently overriding our bound value.
+    # Closures hide the ``config`` parameter from LangGraph's introspection.
+    _c = node_cfg
     g: StateGraph = StateGraph(GraphState)
-    g.add_node("planner", partial(planner_node, config=node_cfg))
-    g.add_node("retriever", partial(retriever_node, config=node_cfg))
-    g.add_node("evaluator", partial(evaluator_node, config=node_cfg))
-    g.add_node("rewriter", partial(rewriter_node, config=node_cfg))
-    g.add_node("generator", partial(generator_node, config=node_cfg))
-    g.add_node("auditor", partial(auditor_node, config=node_cfg))
-    g.add_node("fallback", partial(fallback_node, config=node_cfg))
+    g.add_node("planner", lambda s: planner_node(s, config=_c))
+    g.add_node("retriever", lambda s: retriever_node(s, config=_c))
+    g.add_node("evaluator", lambda s: evaluator_node(s, config=_c))
+    g.add_node("rewriter", lambda s: rewriter_node(s, config=_c))
+    g.add_node("generator", lambda s: generator_node(s, config=_c))
+    g.add_node("auditor", lambda s: auditor_node(s, config=_c))
+    g.add_node("fallback", lambda s: fallback_node(s, config=_c))
 
     g.add_edge(START, "planner")
     g.add_edge("planner", "retriever")
