@@ -2,7 +2,7 @@
 
 A Claim is a sentence (or sentence-like span) of the generated answer
 bound to the set of evidence ids that support it. This lets the auditor
-emit *句级溯源* (per-sentence provenance) instead of one flat
+emit per-sentence provenance (句级溯源) instead of one flat
 ``cited_chunk_ids`` list, and lets the eval layer compute Provenance
 Sufficiency at sentence granularity.
 """
@@ -29,40 +29,41 @@ class Claim(BaseModel):
         return self.support == "supported" and bool(self.evidence_ids)
 
 
-# Sentence terminators — Chinese + English + Japanese.
+# Sentence terminators — Chinese + English + Japanese. The second
+# alternative is a zero-width lookbehind that handles CJK punctuation
+# not followed by whitespace (e.g. "。It uses Neo4j").
 _TERMINATORS = re.compile(r"(?<=[\u3002\uFF01\uFF1F!?\.])\s+|(?<=[\u3002\uFF01\uFF1F])")
 _FENCE = re.compile(r"(```.*?```|\$\$.*?\$\$)", re.DOTALL)
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Terminator-based split for a fence-free chunk; strips and drops empties."""
+    return [p for p in (p.strip() for p in _TERMINATORS.split(text)) if p]
 
 
 def split_into_claims(answer: str) -> list[str]:
     """Segment an answer into sentence-ish spans.
 
     Code blocks and display-math blocks are preserved as single spans so
-    we never split mid-equation or mid-code.
+    we never split mid-equation or mid-code, AND they emit as their own
+    claim (they are not glued to adjacent prose). This is what allows
+    the auditor to attribute a fenced block to its own evidence row.
     """
     if not answer or not answer.strip():
         return []
 
-    # Mask fenced spans before splitting.
-    fences: list[str] = []
-
-    def _mask(m: re.Match) -> str:
-        fences.append(m.group(0))
-        return f"\x00FENCE{len(fences) - 1}\x00"
-
-    masked = _FENCE.sub(_mask, answer)
-
-    raw_parts = [p.strip() for p in _TERMINATORS.split(masked) if p and p.strip()]
-
-    # Unmask.
-    def _unmask(s: str) -> str:
-        return re.sub(
-            r"\x00FENCE(\d+)\x00",
-            lambda m: fences[int(m.group(1))],
-            s,
-        )
-
-    return [_unmask(p) for p in raw_parts]
+    parts: list[str] = []
+    pos = 0
+    for m in _FENCE.finditer(answer):
+        if m.start() > pos:
+            parts.extend(_split_sentences(answer[pos : m.start()]))
+        fence_span = m.group(0).strip()
+        if fence_span:
+            parts.append(fence_span)
+        pos = m.end()
+    if pos < len(answer):
+        parts.extend(_split_sentences(answer[pos:]))
+    return parts
 
 
 def coerce_claims(value: Any) -> list[Claim]:
