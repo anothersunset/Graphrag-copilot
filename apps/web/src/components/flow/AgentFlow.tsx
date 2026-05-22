@@ -1,19 +1,19 @@
-"use client";
+"use client"
 
-import { useMemo, useState } from "react";
-import { ReactFlow, Background, Controls, MiniMap, type Node } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-import { buildLayout } from "./nodes";
-import { AuditDrawer } from "./AuditDrawer";
-import type { RunResponse } from "@/lib/api";
+import { Background, Controls, MiniMap, type Node, ReactFlow } from "@xyflow/react"
+import { useMemo, useState } from "react"
+import "@xyflow/react/dist/style.css"
+import type { RunResponse } from "@/lib/api"
+import { AuditDrawer } from "./AuditDrawer"
+import { buildLayout } from "./nodes"
 
-const FIT_VIEW_OPTIONS = { padding: 0.2 };
-const PRO_OPTIONS = { hideAttribution: true };
+const FIT_VIEW_OPTIONS = { padding: 0.2 }
+const PRO_OPTIONS = { hideAttribution: true }
 
 export function AgentFlow({ data }: { data: RunResponse | null }) {
-  const [activeNode, setActiveNode] = useState<string | null>(null);
+  const [activeNode, setActiveNode] = useState<string | null>(null)
 
-  const { nodes, edges } = useMemo(() => buildLayout(data), [data]);
+  const { nodes, edges } = useMemo(() => buildLayout(data), [data])
 
   return (
     <div className="flex h-[calc(100vh-7rem)] gap-4">
@@ -31,11 +31,7 @@ export function AgentFlow({ data }: { data: RunResponse | null }) {
           <MiniMap pannable zoomable className="!bg-muted/40" />
         </ReactFlow>
       </div>
-      <AuditDrawer
-        run={data}
-        activeNode={activeNode}
-        onClose={() => setActiveNode(null)}
-      />
+      <AuditDrawer run={data} activeNode={activeNode} onClose={() => setActiveNode(null)} />
     </div>
-  );
+  )
 }
