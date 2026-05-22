@@ -1,112 +1,152 @@
-# GraphRAG Copilot — 项目结构
+# GraphRAG Copilot — 项目结构（v3.2 当前快照）
+
+> 本文件描述 **`feat/v3.2-bench` 分支上的真实代码布局**——v1 单体与 v3.1 monorepo 当前并存，v3.2 在 `packages/graph` 与 `packages/eval` 内部增量演进。
+>
+> 完整迁移决策见 [`docs/adr/0001-from-v1-to-v3.1.md`](docs/adr/0001-from-v1-to-v3.1.md)、monorepo 决策见 [`docs/adr/0002-monorepo-container.md`](docs/adr/0002-monorepo-container.md)，8 周路线图见 [`docs/architecture/migration-roadmap.md`](docs/architecture/migration-roadmap.md)。
+
+## 顶层布局（双轨：v1 legacy + v3.x monorepo）
 
 ```
 Graphrag-copilot/
-├── .github/
-│   └── workflows/
-│       └── ci.yml                     # GitHub Actions CI：pytest + ruff lint + frontend build
-├── backend/
-│   ├── app/
-│   │   ├── agents/
-│   │   │   └── orchestrator.py        # Multi-Agent 编排：Query → Retrieval → Reasoning → Verification → Generation
-│   │   ├── api/
-│   │   │   ├── routes.py              # FastAPI 路由：upload / query / graph / vector / system
-│   │   │   └── schemas.py             # Pydantic 请求/响应模型
-│   │   ├── core/
-│   │   │   └── constants.py           # 全局常量：文件类型、实体/关系白名单
-│   │   ├── services/
-│   │   │   ├── bm25_store.py          # BM25 关键词检索 (jieba + rank-bm25)
-│   │   │   ├── document_parser.py     # 多模态文档解析 (PDF/DOCX/PPTX/图片/音视频)
-│   │   │   ├── evidence_fusion.py     # 多路证据融合 & 去重排序
-│   │   │   ├── kg_service.py          # Neo4j 知识图谱服务 (CRUD / 邻居查询 / 路径查找)
-│   │   │   ├── llm_service.py         # LLM 调用封装 (智谱 GLM-4-Flash / OpenAI 兼容)
-│   │   │   └── vector_store.py        # FAISS 向量存储 + SentenceTransformer Embedding
-│   │   └── utils/
-│   │       └── json_utils.py          # LLM JSON 回复容错解析
-│   ├── config/
-│   │   └── settings.py                # Pydantic Settings：全部环境配置
-│   ├── data/
-│   │   ├── raw/                       # 原始上传文件 (.gitkeep)
-│   │   ├── processed/                 # 已处理文档 (.gitkeep)
-│   │   ├── vector_db/                 # FAISS 索引持久化 (.gitkeep)
-│   │   └── graph_db/                  # 图谱导出 (.gitkeep)
-│   ├── tests/
-│   │   ├── test_bm25_store.py         # BM25 检索单测
-│   │   ├── test_evidence_fusion.py    # 证据融合单测
-│   │   ├── test_fallback.py           # Neo4j 降级单测
-│   │   └── test_orchestrator_trace.py # Multi-Agent 全链路 mock 测试
-│   ├── .env.example                   # 环境变量模板
-│   ├── Dockerfile                     # 后端 Docker 镜像
-│   ├── main.py                        # FastAPI 入口（lifespan / CORS / router）
-│   └── requirements.txt              # Python 依赖
-├── demo_docs/
-│   ├── company_ai_strategy.md         # 演示文档：公司 AI 战略
-│   ├── product_architecture.md        # 演示文档：产品架构
-│   └── risk_review.md                 # 演示文档：风险评审
-├── eval/
-│   ├── questions.json                 # 评估题库 (5 题 × 4 类型)
-│   ├── run_eval.py                    # 关键词命中率评估脚本
-│   └── results/                       # 评估结果输出 (.gitkeep)
-├── frontend/
-│   ├── src/
-│   │   └── app/
-│   │       ├── chat/
-│   │       │   └── page.tsx           # 智能问答页 (流式交互)
-│   │       ├── graph/
-│   │       │   └── page.tsx           # 知识图谱可视化页
-│   │       ├── status/
-│   │       │   └── page.tsx           # 系统状态监控页
-│   │       ├── upload/
-│   │       │   └── page.tsx           # 文档上传页 (拖拽上传)
-│   │       ├── globals.css            # Tailwind + 自定义动画
-│   │       ├── layout.tsx             # 全局布局 & 导航栏
-│   │       └── page.tsx               # 首页 (Hero + 功能卡片 + 架构流程)
-│   ├── Dockerfile                     # 前端 Docker 镜像
-│   ├── eslint.config.mjs              # ESLint 配置
-│   ├── next-env.d.ts                  # Next.js TypeScript 声明
-│   ├── next.config.ts                 # Next.js 配置
-│   ├── package.json                   # Node 依赖 (Next.js 16 / React 19 / Tailwind CSS 4)
-│   ├── postcss.config.mjs             # PostCSS 配置
-│   └── tsconfig.json                  # TypeScript 配置
-├── .gitignore                         # Git 忽略规则
-├── docker-compose.yml                 # 三容器编排 (Neo4j + Backend + Frontend)
-├── PROJECT_STRUCTURE.md               # 本文件
-├── README.md                          # 项目文档 + Badges
-├── start.sh                           # 一键启动脚本
-└── test_api.py                        # API 集成测试脚本
+├── apps/                            # v3.1 monorepo — uv workspace 成员
+│   ├── api/                         # graphrag-api（FastAPI + MCP server）
+│   └── web/                         # @graphrag/web（Next.js 15 + React 19）
+│
+├── packages/                        # v3.1 monorepo — uv workspace 成员
+│   ├── schemas/                     # graphrag-schemas（Pydantic 类型中枢）
+│   ├── retrieval/                   # graphrag-retrieval（4 路检索 + BGE rerank）
+│   ├── parsers/                     # graphrag-parsers（语义切分 + late chunking）
+│   ├── kg/                          # graphrag-kg（Neo4j 3-hop 子图）
+│   ├── graph/                       # graphrag-graph（LangGraph 7 节点 + v3.2 EvidencePack/claims/provenance）
+│   ├── observability/               # graphrag-observability（Langfuse trace + audit）
+│   └── eval/                        # graphrag-eval（RAGAS + DeepEval + v3.2 adversarial/bench）
+│
+├── docs/
+│   ├── adr/                         # 架构决策记录（ADR-0001 v1→v3.1、ADR-0002 monorepo）
+│   └── architecture/                # v3.1 final spec / 迁移路线图 / 7 节点设计
+│
+├── infra/
+│   ├── docker/                      # docker-compose.dev.yml（Qdrant + Neo4j + Langfuse + api + web）
+│   └── workflows-template/          # CI YAML 模板（*.tmpl，未激活的哨兵模式）
+│
+├── scripts/
+│   └── install-workflows.sh         # `make ci-activate` 渲染模板到 .github/workflows/
+│
+├── eval/                            # v1 旧评测脚本 + v3.2 results/ 持久化目录
+│
+├── backend/                         # v1 legacy — FastAPI 单体（仍可独立 demo）
+├── frontend/                        # v1 legacy — Next.js 16（仍可独立 demo）
+├── demo_docs/                       # v1 legacy — 演示文档
+├── docker-compose.yml               # v1 legacy — 三容器编排（Neo4j + backend + frontend）
+├── start.sh / test_api.py           # v1 legacy — 一键启动 + 冷烟脚本
+│
+├── Makefile                         # 统一入口：install / dev / test / lint / ci-activate
+├── pyproject.toml                   # uv workspace 根（v3.x 所有 Python 包）
+└── README.md                        # 项目主文档
 ```
 
-## 技术栈
+## v3.1/v3.2 monorepo 详图
+
+### `apps/api/` — graphrag-api
+```
+apps/api/
+├── pyproject.toml                   # 依赖：schemas + graph + retrieval + observability
+├── src/graphrag_api/
+│   ├── main.py                      # FastAPI 应用入口
+│   ├── routes/                      # /query /trace /audit /graph /upload
+│   ├── mcp/                         # MCP server endpoint（W6）
+│   └── settings.py                  # Pydantic Settings
+└── tests/                           # routes + MCP 单测
+```
+
+### `apps/web/` — @graphrag/web
+```
+apps/web/
+├── package.json                     # Next.js 15 + React 19 + Biome
+├── src/app/                         # App Router（chat / trace / graph 三视图）
+└── tsconfig.json
+```
+
+### `packages/` — 7 个工作区成员
+```
+packages/
+├── schemas/         src/graphrag_schemas/      EvidencePack / TraceRow / RetrievalResult / Claim / ProvenanceReport
+├── retrieval/       src/graphrag_retrieval/    vector_retriever / bm25_retriever / kg_retriever / web_retriever / bge_reranker
+├── parsers/         src/graphrag_parsers/      semantic_splitter / markdown_aware / late_chunking
+├── kg/              src/graphrag_kg/           neo4j_client / entity_extractor / three_hop_subgraph
+├── graph/           src/graphrag_graph/        nodes/ (7 LangGraph 节点) · evidence.py · claims.py · provenance.py · adversarial.py
+├── observability/   src/graphrag_observability/ langfuse_client / audit_writer / trace_decorators
+└── eval/            src/graphrag_eval/         metrics/ · ragas_adapter / deepeval_adapter / bench/ (v3.2 端到端基准)
+```
+
+## v3.2 增量交付（位于 `packages/graph` + `packages/eval`）
+
+| 文件 | 功能 | 引入 commit |
+|------|------|------------|
+| `packages/graph/src/graphrag_graph/evidence.py` | `EvidencePack` 容器 + `GraphPath`/`GraphRel`/`RerankTraceRow` | `f53fc1e6` |
+| `packages/graph/src/graphrag_graph/claims.py` | 句级声明抽取 + 异步 entailer 钩子 | `5a36f551` |
+| `packages/graph/src/graphrag_graph/provenance.py` | `provenance_sufficiency` 指标 + `query_history` 隔离 | `af04b315` |
+| `packages/eval/src/graphrag_eval/adversarial.py` | `DistractorCase` + 干扰对抗框架（misled / hallucination / distractor_visited） | `5ee542ff` |
+| `packages/eval/src/graphrag_eval/bench/` | 端到端 zh+en gold + adversarial 基准（reference_runner + CLI） | `a9b9a6ee` |
+| `eval/results/v3.2-provenance-baseline.md` | v3.2 基线 KPI 报告 | `a9b9a6ee` |
+
+## CI / 工作流哨兵模式
+
+仓库根目录**没有** `.github/workflows/`。CI 配置以模板形式存放在 `infra/workflows-template/*.tmpl`，由仓库 owner 在本地一次性执行：
+
+```bash
+make ci-activate    # 调用 scripts/install-workflows.sh
+git push            # 推 .github/workflows/* 到远端
+```
+
+采用这种模式是因为 MCP/Actions OAuth 令牌通常没有 `workflow` scope，无法代写 `.github/workflows/`。激活后 PR #3~#6 才能跑 pytest + ruff + pyright。
+
+## 技术栈快照（v3.x）
 
 | 层级 | 技术 | 版本 | 用途 |
 |------|------|------|------|
-| **LLM** | 智谱 GLM-4-Flash | — | 对话生成 / 实体抽取 / 答案验证 |
-| **Embedding** | BAAI/bge-small-zh-v1.5 | dim 512 | 文本向量化 |
-| **向量库** | FAISS | 1.8.0 | IndexFlatIP 内积检索 |
-| **图数据库** | Neo4j | 5.x | 知识图谱存储 / 邻居查询 / 路径查找 |
-| **关键词检索** | rank-bm25 + jieba | — | BM25 中文分词检索 |
-| **后端框架** | FastAPI | 0.115.0 | REST API + CORS + 文件上传 |
-| **前端框架** | Next.js | 16 | React 19 + Tailwind CSS 4 |
-| **容器化** | Docker Compose | 3.8 | Neo4j + Backend + Frontend |
-| **CI** | GitHub Actions | — | pytest + ruff + frontend build |
-| **Python** | Python | 3.11+ | 后端运行时 |
+| **Python** | CPython | 3.12+（root 强制） / 包级 3.11+ | 后端与各包运行时 |
+| **包管理** | uv | latest | workspace + lock + sync |
+| **LLM 编排** | LangGraph | 0.2.40+ | 7 节点 Agentic RAG |
+| **LLM SDK** | litellm + instructor | — | 多模型 + 结构化输出 |
+| **向量库** | Qdrant | 1.12+ | HNSW 向量检索 |
+| **图数据库** | Neo4j | 5.20+ | 3-hop 子图 |
+| **关键词检索** | rank-bm25 + jieba | — | BM25 中文分词 |
+| **Rerank** | BAAI FlagEmbedding | — | BGE cross-encoder |
+| **可观测** | Langfuse | 2.50+ | trace + audit |
+| **评测** | RAGAS + DeepEval + 自研 | — | Recall/Precision/Faithfulness/PS |
+| **后端** | FastAPI + MCP SDK | 0.115 / 1.0+ | REST + MCP server |
+| **前端** | Next.js + React | 15 / 19 | App Router |
+| **类型检查** | Pyright basic（W7 → strict） | — | Python 类型 |
+| **Lint/Format** | Ruff + Biome | — | Python + TS |
 
-## 核心数据流
+## v3.x 端到端数据流（LangGraph 7 节点）
 
 ```
-用户查询 → QueryUnderstandingAgent (意图/实体识别)
-         → RetrievalAgent (并行: FAISS + BM25 + Neo4j)
-         → EvidenceFusionService (去重/加权/压缩)
-         → ReasoningAgent (多跳推理 + 来源标注)
-         → VerificationAgent (事实校验 / 幻觉检测)
-         → GenerationAgent (最终回答 + 置信度 + 引用)
+UserQuery → QueryUnderstanding → Retrieval (vector‖bm25‖kg‖web)
+          → Rerank (BGE cross-encoder)
+          → CRAG  (relevance gate + web fallback)
+          → Reasoning (multi-hop with EvidencePack)
+          → Verification (claims + provenance_sufficiency)
+          → Generation (answer + citations + confidence)
+          ↘ Langfuse trace · audit JSON · query_history per session
 ```
 
-## 优雅降级策略
+## 优雅降级（继承自 v1，v3.x 仍保留）
 
 | 故障组件 | 降级行为 |
 |----------|----------|
-| **Neo4j** | FAISS + BM25 双路继续，图谱返回 `disconnected` |
-| **LLM** | 返回原始检索证据 + 错误提示，不编造 |
-| **Embedding** | md5 hash 备选向量，向量检索仍可用（精度降低） |
-| **FAISS** | BM25 关键词检索独立工作 |
+| Neo4j | vector + BM25 + web 三路继续，KG 路径返回空 |
+| Qdrant | BM25 独立工作，向量召回缺失走 CRAG web fallback |
+| LLM | 返回原始检索证据 + 失败标记，不编造 |
+| Embedding | md5 hash 备选向量（精度降低） |
+
+## v1 legacy 子树（保留以供回归对照）
+
+```
+backend/  app/{agents,api,services,utils} + config + tests + main.py + requirements.txt
+frontend/ src/app/{chat,graph,status,upload} + Next.js 16 + Tailwind 4
+eval/     questions.json + run_eval.py（旧 5 题关键词命中率）
+```
+
+v1 子树仍可通过仓库根的 `docker-compose.yml` 单独启动，方便与 v3.x 做对照。最终 v3.1 GA 后将归档 v1 至 `legacy/` 或独立 tag，时间表见迁移路线图。
