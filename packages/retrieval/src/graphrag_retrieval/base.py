@@ -9,9 +9,9 @@ Source = Literal["vector", "bm25", "kg", "web"]
 class RetrievalHit(TypedDict, total=False):
     """A single retrieved chunk.
 
-    Matches the shape consumed by ``graphrag_graph.state.RetrievalHit``;
-    duplicated as a TypedDict here so this package has zero hard dependency
-    on the graph package.
+    v3.2: ``path`` and ``visited_node_ids`` are populated by the KG
+    retriever (and ignored by other routes) so EvidencePack can preserve
+    multi-hop structure end-to-end.
     """
 
     chunk_id: str
@@ -20,6 +20,9 @@ class RetrievalHit(TypedDict, total=False):
     rerank_score: float | None
     content: str
     metadata: dict[str, Any]
+    # v3.2 extensions — KG only
+    path: dict[str, Any] | None
+    visited_node_ids: list[str]
 
 
 @runtime_checkable
@@ -40,12 +43,8 @@ def rrf_fuse(
 ) -> list[RetrievalHit]:
     """Reciprocal Rank Fusion across multiple ranked lists.
 
-    Score: ``RRF(d) = Σ 1 / (k + rank(d, list_i))`` for each list that
-    contains ``d``. Hits without a chunk_id fall back to a content-prefix
-    digest so they still dedup sensibly.
-
-    The fused hit inherits the metadata of the highest-original-scored
-    appearance of the chunk and stores the RRF score in ``score``.
+    Preserves v3.2 ``path`` and ``visited_node_ids`` from KG hits when
+    present.
     """
     if not route_results:
         return []

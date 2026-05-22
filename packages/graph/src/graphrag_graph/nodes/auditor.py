@@ -1,8 +1,14 @@
-"""Auditor node — DSPy verdict with citation-count fallback."""
+"""Auditor node — DSPy verdict with citation-count fallback.
+
+v3.2: also emits sentence-level ``claims`` (each sentence -> evidence
+ids). If DSPy didn't return them, we build them heuristically from the
+answer + retrieval context using token overlap.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from ..claims import Claim, heuristic_claims
 from ..contracts import AuditEntry
 from ..dspy_auditor import DSPyAuditor
 
@@ -17,6 +23,7 @@ def auditor(state: dict, *, config: dict | None = None) -> dict:
     verdict_str = "pass"
     rationale = ""
     cited: list[str] = []
+    claims: list[Claim] = []
 
     if dspy_auditor is not None:
         try:
@@ -29,6 +36,7 @@ def auditor(state: dict, *, config: dict | None = None) -> dict:
             verdict_str = v.verdict
             rationale = v.rationale
             cited = v.cited_chunk_ids
+            claims = v.claims
         except Exception:
             # fall through to heuristic
             pass
@@ -41,18 +49,29 @@ def auditor(state: dict, *, config: dict | None = None) -> dict:
         verdict_str = "pass" if cited else "unsupported"
         rationale = rationale or "heuristic auditor: cited chunks present in answer"
 
+    if not claims:
+        claims = heuristic_claims(
+            answer,
+            cited_chunk_ids=cited,
+            contexts=fused,
+        )
+
+    unsupported = sum(1 for c in claims if not c.is_supported())
     audit = AuditEntry(
         node="auditor",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        summary=f"verdict={verdict_str} cited={len(cited)}",
+        summary=f"verdict={verdict_str} cited={len(cited)} claims={len(claims)} unsupported={unsupported}",
         detail={
             "verdict": verdict_str,
             "rationale": rationale,
             "cited_tools": list({h.get("source") for h in fused if h.get("source")}),
+            "claim_count": len(claims),
+            "unsupported_claim_count": unsupported,
         },
     )
     return {
         "audit": [audit],
         "cited_chunk_ids": cited,
         "verdict": verdict_str,
+        "claims": [c.model_dump() for c in claims],
     }

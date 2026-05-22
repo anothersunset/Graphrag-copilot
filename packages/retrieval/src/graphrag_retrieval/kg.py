@@ -1,9 +1,10 @@
-"""Neo4j knowledge graph retriever.
+"""Neo4j knowledge graph retriever with multi-hop path preservation.
 
-Given a natural-language query, this retriever extracts likely entity
-mentions (via injected NER or a simple noun-phrase fallback), runs a
-Cypher subgraph query around each entity, and renders the 1-hop
-neighborhood as natural-language hits the generator can cite.
+v3.2: switched from 1-hop OPTIONAL MATCH to variable-length path matching
+(``MATCH p=(e:Entity)-[*1..max_depth]-()``) so each hit carries the full
+traversed path (node ids + relation types + depth). The retriever also
+accumulates ``visited_node_ids`` across the whole query — every node it
+touched, even paths that didn't make the top-K.
 """
 from __future__ import annotations
 
@@ -17,19 +18,20 @@ logger = logging.getLogger(__name__)
 DEFAULT_CYPHER = """
 MATCH (e:Entity)
 WHERE toLower(e.name) IN $names
-OPTIONAL MATCH (e)-[r]-(n)
-RETURN e.name AS subject,
-       type(r)  AS relation,
-       n.name   AS object,
-       e.id     AS entity_id,
-       coalesce(e.description, '') AS subject_desc,
-       coalesce(n.description, '') AS object_desc
+CALL {
+    WITH e
+    MATCH p = (e)-[*1..$max_depth]-(n)
+    RETURN p AS path, length(p) AS depth
+    ORDER BY depth ASC
+    LIMIT $branch_limit
+}
+RETURN path, depth
 LIMIT $limit
 """
 
 
 class KGRetriever:
-    """Async-friendly Cypher subgraph retriever."""
+    """Async-friendly multi-hop Cypher subgraph retriever."""
 
     name = "kg"
 
@@ -42,6 +44,8 @@ class KGRetriever:
         ner: Any | None = None,
         cypher: str = DEFAULT_CYPHER,
         driver: Any | None = None,
+        max_depth: int = 2,
+        branch_limit: int = 8,
     ) -> None:
         self.uri = uri
         self.auth = auth
@@ -49,6 +53,8 @@ class KGRetriever:
         self.ner = ner
         self.cypher = cypher
         self._driver = driver
+        self.max_depth = max_depth
+        self.branch_limit = branch_limit
 
     @property
     def driver(self):
@@ -67,7 +73,6 @@ class KGRetriever:
         if self.ner is not None:
             ents = self.ner.extract(query)
             return [e.lower() for e in ents]
-        # Fallback: jieba noun-phrase candidates.
         try:
             import jieba.posseg as pseg
 
@@ -86,64 +91,142 @@ class KGRetriever:
         try:
             with self.driver.session(database=self.database) as session:
                 records = list(
-                    session.run(self.cypher, names=names, limit=top_k * 4)
+                    session.run(
+                        self.cypher,
+                        names=names,
+                        max_depth=self.max_depth,
+                        branch_limit=self.branch_limit,
+                        limit=top_k * 4,
+                    )
                 )
         except Exception:
             logger.exception("kg retrieval failed for query=%r", query)
             return []
 
+        visited: set[str] = set()
         hits: list[RetrievalHit] = []
         for i, rec in enumerate(records[: top_k * 4]):
-            subject = rec.get("subject") or ""
-            relation = rec.get("relation")
-            obj = rec.get("object")
-            entity_id = rec.get("entity_id")
-            if relation and obj:
-                content = f"{subject} —[{relation}]→ {obj}"
-                desc = rec.get("object_desc") or rec.get("subject_desc") or ""
-                if desc:
-                    content = f"{content}. {desc}"
-            else:
-                content = f"{subject}: {rec.get('subject_desc', '')}"
+            path_obj = rec.get("path")
+            depth = int(rec.get("depth") or 0)
+            path_dict = _neo4j_path_to_dict(path_obj, depth)
+            if path_dict is None:
+                continue
+            for n in path_dict["nodes"]:
+                visited.add(n["id"])
+            rendered = _render_path(path_dict)
             hits.append(
                 {
-                    "chunk_id": f"kg:{entity_id or subject}:{i}",
+                    "chunk_id": f"kg:{path_dict['nodes'][0]['id']}->...->{path_dict['nodes'][-1]['id']}@d{depth}",
                     "source": "kg",
                     "score": 1.0 / (i + 1),
-                    "content": content,
-                    "metadata": {
-                        "subject": subject,
-                        "relation": relation,
-                        "object": obj,
-                        "entity_id": entity_id,
-                    },
+                    "content": rendered,
+                    "metadata": {"depth": depth},
+                    "path": path_dict,
+                    "visited_node_ids": [n["id"] for n in path_dict["nodes"]],
                 }
             )
+
+        # broadcast the full visited set onto the top hit so the
+        # caller can aggregate per-query visited_nodes for EvidencePack.
+        if hits:
+            hits[0]["visited_node_ids"] = sorted(visited)
         return hits[:top_k]
 
     @classmethod
+    def from_paths(
+        cls, paths: Sequence[dict], *, visited: Sequence[str] | None = None
+    ) -> "_StaticKGRetriever":
+        return _StaticKGRetriever(paths, visited=visited)
+
+    # legacy convenience for v3.1 tests that pass (s, r, o) triples
+    @classmethod
     def from_triples(cls, triples: Sequence[tuple[str, str, str]]) -> "_StaticKGRetriever":
-        return _StaticKGRetriever(triples)
+        paths = []
+        for s, r, o in triples:
+            paths.append(
+                {
+                    "nodes": [
+                        {"id": s, "name": s, "labels": ["Entity"], "properties": {}},
+                        {"id": o, "name": o, "labels": ["Entity"], "properties": {}},
+                    ],
+                    "rels": [{"source_id": s, "target_id": o, "type": r, "properties": {}}],
+                    "depth": 1,
+                }
+            )
+        return _StaticKGRetriever(paths)
 
 
 class _StaticKGRetriever:
-    """Test double for KGRetriever — returns canned triples as hits."""
+    """Test double for KGRetriever — returns canned paths as hits."""
 
     name = "kg"
 
-    def __init__(self, triples: Sequence[tuple[str, str, str]]) -> None:
-        self._triples = list(triples)
+    def __init__(self, paths: Sequence[dict], *, visited: Sequence[str] | None = None) -> None:
+        self._paths = list(paths)
+        self._visited = list(visited) if visited is not None else None
 
     async def aretrieve(self, query: str, *, top_k: int) -> list[RetrievalHit]:
         hits: list[RetrievalHit] = []
-        for i, (s, r, o) in enumerate(self._triples[:top_k]):
+        all_visited: set[str] = set()
+        for i, path in enumerate(self._paths[:top_k]):
+            for n in path["nodes"]:
+                all_visited.add(n["id"])
+            rendered = _render_path(path)
             hits.append(
                 {
-                    "chunk_id": f"kg:test:{i}",
+                    "chunk_id": f"kg:{path['nodes'][0]['id']}->...->{path['nodes'][-1]['id']}@d{path['depth']}",
                     "source": "kg",
                     "score": 1.0 / (i + 1),
-                    "content": f"{s} —[{r}]→ {o}",
-                    "metadata": {"subject": s, "relation": r, "object": o},
+                    "content": rendered,
+                    "metadata": {"depth": path["depth"]},
+                    "path": path,
+                    "visited_node_ids": [n["id"] for n in path["nodes"]],
                 }
             )
+        if hits:
+            visited = self._visited if self._visited is not None else sorted(all_visited)
+            hits[0]["visited_node_ids"] = list(visited)
         return hits
+
+
+def _neo4j_path_to_dict(path_obj: Any, depth: int) -> dict | None:
+    """Convert a neo4j.graph.Path into our plain-dict representation."""
+    if path_obj is None:
+        return None
+    try:
+        nodes = [
+            {
+                "id": str(n.element_id) if hasattr(n, "element_id") else str(n.get("id", n.get("name", ""))),
+                "name": str(n.get("name", "")) if hasattr(n, "get") else "",
+                "labels": list(getattr(n, "labels", [])),
+                "properties": dict(n) if hasattr(n, "items") else {},
+            }
+            for n in path_obj.nodes
+        ]
+        rels = [
+            {
+                "source_id": str(r.start_node.element_id) if hasattr(r.start_node, "element_id") else "",
+                "target_id": str(r.end_node.element_id) if hasattr(r.end_node, "element_id") else "",
+                "type": r.type,
+                "properties": dict(r) if hasattr(r, "items") else {},
+            }
+            for r in path_obj.relationships
+        ]
+        return {"nodes": nodes, "rels": rels, "depth": depth}
+    except Exception:
+        logger.exception("failed to convert neo4j path")
+        return None
+
+
+def _render_path(path: dict) -> str:
+    """Render a path dict as 'A -[REL]-> B -[REL2]-> C'."""
+    nodes = path["nodes"]
+    rels = path["rels"]
+    if not nodes:
+        return ""
+    out = [nodes[0].get("name") or nodes[0].get("id", "")]
+    for i, rel in enumerate(rels):
+        nxt = nodes[i + 1]
+        out.append(f" —[{rel['type']}]→ ")
+        out.append(nxt.get("name") or nxt.get("id", ""))
+    return "".join(out)
