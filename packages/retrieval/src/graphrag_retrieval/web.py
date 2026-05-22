@@ -3,6 +3,7 @@
 Disabled by default (returns empty list) so unit tests + CI never hit the
 open web. Enable by passing an adapter or setting TAVILY_API_KEY.
 """
+
 from __future__ import annotations
 
 import logging

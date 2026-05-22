@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     env: str = "dev"
     log_level: str = "INFO"
-    api_host: str = "0.0.0.0"  # noqa: S104  intentional bind for container
+    api_host: str = "0.0.0.0"
     api_port: int = 8000
 
 

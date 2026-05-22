@@ -1,10 +1,10 @@
 """v3.2 KG retriever multi-hop path round-trip."""
+
 from __future__ import annotations
 
 import asyncio
 
 from graphrag_retrieval.kg import KGRetriever
-
 
 PATH_2HOP = {
     "nodes": [
@@ -51,9 +51,7 @@ def test_visited_node_ids_aggregate_across_paths():
 
 
 def test_explicit_visited_override():
-    retriever = KGRetriever.from_paths(
-        [PATH_1HOP], visited=["GraphRAG", "BM25", "DistractorNode"]
-    )
+    retriever = KGRetriever.from_paths([PATH_1HOP], visited=["GraphRAG", "BM25", "DistractorNode"])
     hits = asyncio.run(retriever.aretrieve("q", top_k=5))
     assert "DistractorNode" in hits[0]["visited_node_ids"]
 

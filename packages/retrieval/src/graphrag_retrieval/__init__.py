@@ -1,4 +1,5 @@
 """Four-route retrieval for GraphRAG Copilot v3.1."""
+
 from .base import AsyncRetriever, RetrievalHit, rrf_fuse
 from .bm25 import BM25Document, BM25Retriever
 from .contextual import ContextualizedChunk, ContextualRetrievalGenerator
@@ -21,6 +22,6 @@ __all__ = [
     "TavilyAdapter",
     "VectorRetriever",
     "WebRetriever",
-    "rrf_fuse",
     "__version__",
+    "rrf_fuse",
 ]

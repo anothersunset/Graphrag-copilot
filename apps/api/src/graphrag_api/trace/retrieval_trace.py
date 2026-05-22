@@ -5,10 +5,12 @@ v3.2: rows now carry the multi-hop ``graph_path`` and the per-query
 ``visited_node_count`` so the frontend can draw KG edges, not just chunk
 dots.
 """
+
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Any, Sequence
+from typing import Any
 
 
 @dataclass

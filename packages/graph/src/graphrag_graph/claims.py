@@ -6,11 +6,13 @@ emit *句级溯源* (per-sentence provenance) instead of one flat
 ``cited_chunk_ids`` list, and lets the eval layer compute Provenance
 Sufficiency at sentence granularity.
 """
+
 from __future__ import annotations
 
 import json
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from pydantic import BaseModel, Field
 

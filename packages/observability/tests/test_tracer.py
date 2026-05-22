@@ -1,4 +1,5 @@
 """Tracer no-op + AuditExporter round-trip."""
+
 from __future__ import annotations
 
 from graphrag_observability.langfuse_tracer import NoopTracer

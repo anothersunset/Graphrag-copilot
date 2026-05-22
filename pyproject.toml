@@ -12,15 +12,27 @@ authors = [{ name = "lee fanwei" }]
 [tool.uv.workspace]
 members = ["apps/api", "packages/*"]
 
+# Workspace member sources. Each entry MUST match the [project].name of a real
+# workspace member. The auto-discovered members under apps/api and packages/*
+# are (as of v3.2):
+#   apps/api               → graphrag-api
+#   packages/schemas       → graphrag-schemas
+#   packages/retrieval     → graphrag-retrieval
+#   packages/parsers       → graphrag-parsers
+#   packages/kg            → graphrag-kg
+#   packages/graph         → graphrag-graph
+#   packages/observability → graphrag-observability
+#   packages/eval          → graphrag-eval
+# If you add a new packages/<name> member, append its [project].name here.
 [tool.uv.sources]
-graphrag-api          = { workspace = true }
-graphrag-schemas      = { workspace = true }
-graphrag-retriever    = { workspace = true }
-graphrag-reranker     = { workspace = true }
-graphrag-kg           = { workspace = true }
-graphrag-graph        = { workspace = true }
+graphrag-api           = { workspace = true }
+graphrag-schemas       = { workspace = true }
+graphrag-retrieval     = { workspace = true }
+graphrag-parsers       = { workspace = true }
+graphrag-kg            = { workspace = true }
+graphrag-graph         = { workspace = true }
 graphrag-observability = { workspace = true }
-graphrag-evals        = { workspace = true }
+graphrag-eval          = { workspace = true }
 
 [dependency-groups]
 dev = [

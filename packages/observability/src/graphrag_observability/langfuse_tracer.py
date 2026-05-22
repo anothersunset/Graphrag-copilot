@@ -1,21 +1,27 @@
 """Langfuse 2.x tracer wrapper with no-op fallback."""
+
 from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator, Protocol
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
 
 class Tracer(Protocol):
-    def trace(self, name: str, *, input: Any = None, metadata: dict | None = None) -> "TraceHandle": ...
+    def trace(
+        self, name: str, *, input: Any = None, metadata: dict | None = None
+    ) -> TraceHandle: ...
     def flush(self) -> None: ...
 
 
 class TraceHandle(Protocol):
-    def span(self, name: str, *, input: Any = None, metadata: dict | None = None) -> "SpanHandle": ...
+    def span(
+        self, name: str, *, input: Any = None, metadata: dict | None = None
+    ) -> SpanHandle: ...
     def event(self, name: str, *, input: Any = None, metadata: dict | None = None) -> None: ...
     def update(self, *, output: Any = None, metadata: dict | None = None) -> None: ...
     def end(self, *, output: Any = None) -> None: ...

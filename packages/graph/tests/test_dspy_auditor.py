@@ -1,4 +1,5 @@
 """DSPy auditor module — stubbed module round-trip."""
+
 from __future__ import annotations
 
 from graphrag_graph.dspy_auditor import AuditVerdict, DSPyAuditor

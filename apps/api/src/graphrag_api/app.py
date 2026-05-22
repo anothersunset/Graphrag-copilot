@@ -1,4 +1,5 @@
 """FastAPI app exposing /v1/ask and the MCP server at /v1/mcp."""
+
 from __future__ import annotations
 
 import logging

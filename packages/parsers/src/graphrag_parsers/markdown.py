@@ -6,11 +6,12 @@ SemanticChunker if a section exceeds the token budget). Fenced code
 blocks and pipe tables are preserved as a single atomic block (never
 split mid-fence).
 """
+
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 from .chunker import ChunkRecord, SemanticChunker
 
@@ -34,9 +35,7 @@ class MarkdownSplitter:
         max_tokens: int = 512,
         overlap_tokens: int = 64,
     ) -> None:
-        self._chunker = SemanticChunker(
-            max_tokens=max_tokens, overlap_tokens=overlap_tokens
-        )
+        self._chunker = SemanticChunker(max_tokens=max_tokens, overlap_tokens=overlap_tokens)
 
     def split(self, *, doc_id: str, text: str) -> Iterator[ChunkRecord]:
         for section in self._iter_sections(text):

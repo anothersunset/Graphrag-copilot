@@ -1,14 +1,14 @@
 """Evaluator node — wraps CragScorer."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
-from ..contracts import AuditEntry
 from ..crag import CragScorer
+from ..state import AuditEntry
 
 
-def evaluator(state: dict, *, config: dict | None = None) -> dict:
+def evaluator_node(state: dict, *, config: dict | None = None) -> dict:
     """Score the current candidate set and emit a CRAG decision."""
     config = config or {}
     scorer: CragScorer = config.get("crag_scorer") or CragScorer()
@@ -17,7 +17,7 @@ def evaluator(state: dict, *, config: dict | None = None) -> dict:
 
     audit = AuditEntry(
         node="evaluator",
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         summary=f"CRAG decision={result.decision} score={result.score:.3f}",
         detail={
             "score": result.score,

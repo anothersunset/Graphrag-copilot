@@ -6,10 +6,12 @@ traversed path (node ids + relation types + depth). The retriever also
 accumulates ``visited_node_ids`` across the whole query — every node it
 touched, even paths that didn't make the top-K.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from .base import RetrievalHit
 
@@ -63,8 +65,7 @@ class KGRetriever:
                 from neo4j import GraphDatabase
             except ImportError as e:
                 raise RuntimeError(
-                    "KGRetriever requires the neo4j driver. Install with "
-                    "'graphrag-retrieval[kg]'."
+                    "KGRetriever requires the neo4j driver. Install with 'graphrag-retrieval[kg]'."
                 ) from e
             self._driver = GraphDatabase.driver(self.uri, auth=self.auth)
         return self._driver
@@ -77,9 +78,7 @@ class KGRetriever:
             import jieba.posseg as pseg
 
             return [
-                w.lower()
-                for w, flag in pseg.cut(query)
-                if flag.startswith("n") and len(w) >= 2
+                w.lower() for w, flag in pseg.cut(query) if flag.startswith("n") and len(w) >= 2
             ]
         except ImportError:
             return [t.lower() for t in query.split() if len(t) >= 2]
@@ -135,12 +134,12 @@ class KGRetriever:
     @classmethod
     def from_paths(
         cls, paths: Sequence[dict], *, visited: Sequence[str] | None = None
-    ) -> "_StaticKGRetriever":
+    ) -> _StaticKGRetriever:
         return _StaticKGRetriever(paths, visited=visited)
 
     # legacy convenience for v3.1 tests that pass (s, r, o) triples
     @classmethod
-    def from_triples(cls, triples: Sequence[tuple[str, str, str]]) -> "_StaticKGRetriever":
+    def from_triples(cls, triples: Sequence[tuple[str, str, str]]) -> _StaticKGRetriever:
         paths = []
         for s, r, o in triples:
             paths.append(
@@ -196,7 +195,9 @@ def _neo4j_path_to_dict(path_obj: Any, depth: int) -> dict | None:
     try:
         nodes = [
             {
-                "id": str(n.element_id) if hasattr(n, "element_id") else str(n.get("id", n.get("name", ""))),
+                "id": str(n.element_id)
+                if hasattr(n, "element_id")
+                else str(n.get("id", n.get("name", ""))),
                 "name": str(n.get("name", "")) if hasattr(n, "get") else "",
                 "labels": list(getattr(n, "labels", [])),
                 "properties": dict(n) if hasattr(n, "items") else {},
@@ -205,8 +206,12 @@ def _neo4j_path_to_dict(path_obj: Any, depth: int) -> dict | None:
         ]
         rels = [
             {
-                "source_id": str(r.start_node.element_id) if hasattr(r.start_node, "element_id") else "",
-                "target_id": str(r.end_node.element_id) if hasattr(r.end_node, "element_id") else "",
+                "source_id": str(r.start_node.element_id)
+                if hasattr(r.start_node, "element_id")
+                else "",
+                "target_id": str(r.end_node.element_id)
+                if hasattr(r.end_node, "element_id")
+                else "",
                 "type": r.type,
                 "properties": dict(r) if hasattr(r, "items") else {},
             }

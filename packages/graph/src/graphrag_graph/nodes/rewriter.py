@@ -1,4 +1,5 @@
 """Rewriter node — rewrite the query and increment the rewrite counter."""
+
 from __future__ import annotations
 
 import logging
@@ -10,9 +11,7 @@ from ..state import GraphState
 logger = logging.getLogger(__name__)
 
 
-def rewriter_node(
-    state: GraphState, config: dict[str, Any] | None = None
-) -> dict[str, Any]:
+def rewriter_node(state: GraphState, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
     rewriter = cfg.get("query_rewriter")
 

@@ -7,10 +7,11 @@ Usage:
 The scorer is dependency-injected so tests can pass a deterministic
 function without loading the actual 568M-parameter model.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 from .base import RetrievalHit
 
@@ -45,8 +46,7 @@ class BGEReranker:
             from FlagEmbedding import FlagReranker
         except ImportError as e:
             raise RuntimeError(
-                "BGEReranker requires FlagEmbedding. Install with "
-                "'graphrag-retrieval[rerank]'."
+                "BGEReranker requires FlagEmbedding. Install with 'graphrag-retrieval[rerank]'."
             ) from e
         self._model = FlagReranker(self.model_name, use_fp16=self.use_fp16)
         return self._model

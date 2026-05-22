@@ -1,4 +1,5 @@
 """Reciprocal Rank Fusion correctness."""
+
 from __future__ import annotations
 
 from graphrag_retrieval.base import rrf_fuse

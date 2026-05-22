@@ -1,4 +1,5 @@
 """Evaluator routes correctly across the locked CRAG thresholds."""
+
 from __future__ import annotations
 
 from graphrag_graph.config import CragThresholds

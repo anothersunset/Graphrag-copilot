@@ -1,4 +1,5 @@
 """Shared pydantic schemas for GraphRAG Copilot."""
+
 from .evidence import (
     ChunkEvidence,
     EvidencePack,

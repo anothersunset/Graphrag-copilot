@@ -1,4 +1,5 @@
 """Planner node — analyse the question, choose tools, set retrieval plan."""
+
 from __future__ import annotations
 
 import logging
@@ -10,9 +11,7 @@ from ..state import GraphState
 logger = logging.getLogger(__name__)
 
 
-def planner_node(
-    state: GraphState, config: dict[str, Any] | None = None
-) -> dict[str, Any]:
+def planner_node(state: GraphState, config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Plan retrieval strategy for the question.
 
     W2 skeleton: deterministic fan-out plan. W7 swaps in a DSPy
@@ -38,9 +37,7 @@ def planner_node(
     audit_entry = {
         "node": "planner",
         "decision": "fanout",
-        "rationale": (
-            f"selected {len(tools)} retrievers for intent={plan['intent']}"
-        ),
+        "rationale": (f"selected {len(tools)} retrievers for intent={plan['intent']}"),
         "inputs_digest": digest(question),
         "outputs_digest": digest({"plan": plan, "tools": tools}),
         "timestamp": now_iso(),

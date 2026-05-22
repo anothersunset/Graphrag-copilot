@@ -1,4 +1,5 @@
 """Document parsing + chunking for GraphRAG Copilot v3.1."""
+
 from .chunker import ChunkRecord, SemanticChunker
 from .late_chunking import LateChunkingPlanner, LateChunkSpan
 from .markdown import MarkdownSplitter

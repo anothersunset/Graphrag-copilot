@@ -5,6 +5,7 @@ dependency-injected so tests + offline runs work without an API key. If
 DSPy isn't installed, ``DSPyAuditor.audit`` raises and the auditor node
 falls back to the heuristic.
 """
+
 from __future__ import annotations
 
 import logging
@@ -45,9 +46,7 @@ class DSPyAuditor:
         try:
             import dspy  # type: ignore
         except ImportError as e:
-            raise RuntimeError(
-                "DSPyAuditor requires dspy. Install with the [dspy] extra."
-            ) from e
+            raise RuntimeError("DSPyAuditor requires dspy. Install with the [dspy] extra.") from e
 
         if self._lm is not None:
             dspy.settings.configure(lm=self._lm)

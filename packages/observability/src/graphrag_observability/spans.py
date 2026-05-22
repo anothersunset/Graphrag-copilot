@@ -1,12 +1,16 @@
 """Node-aware span helpers and AuditEntry export."""
+
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 
 @contextmanager
-def NodeSpan(trace: Any, *, name: str, input: Any = None, metadata: dict | None = None) -> Iterator[Any]:
+def NodeSpan(
+    trace: Any, *, name: str, input: Any = None, metadata: dict | None = None
+) -> Iterator[Any]:
     """Context manager that opens a Langfuse span scoped to one graph node."""
     span = trace.span(name=name, input=input, metadata=metadata or {})
     try:
@@ -29,10 +33,20 @@ class AuditExporter:
         self._trace = trace
 
     def export(self, entry: Any) -> None:
-        node = getattr(entry, "node", None) or (entry.get("node") if isinstance(entry, dict) else None)
-        timestamp = getattr(entry, "timestamp", None) or (entry.get("timestamp") if isinstance(entry, dict) else None)
-        summary = getattr(entry, "summary", None) or (entry.get("summary") if isinstance(entry, dict) else None)
-        detail = getattr(entry, "detail", None) or (entry.get("detail") if isinstance(entry, dict) else None) or {}
+        node = getattr(entry, "node", None) or (
+            entry.get("node") if isinstance(entry, dict) else None
+        )
+        timestamp = getattr(entry, "timestamp", None) or (
+            entry.get("timestamp") if isinstance(entry, dict) else None
+        )
+        summary = getattr(entry, "summary", None) or (
+            entry.get("summary") if isinstance(entry, dict) else None
+        )
+        detail = (
+            getattr(entry, "detail", None)
+            or (entry.get("detail") if isinstance(entry, dict) else None)
+            or {}
+        )
 
         try:
             self._trace.event(

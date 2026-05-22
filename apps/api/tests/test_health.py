@@ -1,7 +1,6 @@
 """Tests for health endpoints."""
 
 from fastapi.testclient import TestClient
-
 from graphrag_api import __version__
 from graphrag_api.main import app
 

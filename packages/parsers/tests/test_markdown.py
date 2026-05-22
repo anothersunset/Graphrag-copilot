@@ -1,8 +1,8 @@
 """Markdown splitter correctness."""
+
 from __future__ import annotations
 
 from graphrag_parsers.markdown import MarkdownSplitter
-
 
 MD = """# Project
 
@@ -33,9 +33,9 @@ def test_breadcrumbs_track_heading_stack():
     chunks = list(s.split(doc_id="md1", text=MD))
     crumbs = {c.metadata["breadcrumbs"] for c in chunks}
     # All three headings should appear in some breadcrumb path
-    assert any("Project > Architecture > Retrieval" == c for c in crumbs)
-    assert any("Project > Architecture" == c for c in crumbs)
-    assert any("Project > Eval" == c for c in crumbs)
+    assert any(c == "Project > Architecture > Retrieval" for c in crumbs)
+    assert any(c == "Project > Architecture" for c in crumbs)
+    assert any(c == "Project > Eval" for c in crumbs)
 
 
 def test_code_fence_stays_atomic():

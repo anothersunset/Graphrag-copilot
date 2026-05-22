@@ -1,11 +1,12 @@
 """rank_bm25 + jieba sparse retriever with on-disk persistence."""
+
 from __future__ import annotations
 
 import logging
 import pickle
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 from .base import RetrievalHit
 
@@ -84,7 +85,7 @@ class BM25Retriever:
         logger.info("BM25Retriever: saved %d docs to %s", len(self._docs), p)
 
     @classmethod
-    def load(cls, path: str | Path) -> "BM25Retriever":
+    def load(cls, path: str | Path) -> BM25Retriever:
         p = Path(path)
         with p.open("rb") as f:
             data = pickle.load(f)
@@ -107,9 +108,7 @@ class BM25Retriever:
         scores = self._bm25.get_scores(tokens)
 
         # argsort descending; cheap for small corpora, swap to heapq.nlargest at scale
-        ranked = sorted(
-            range(len(scores)), key=lambda i: scores[i], reverse=True
-        )[:top_k]
+        ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
 
         hits: list[RetrievalHit] = []
         for rank, idx in enumerate(ranked):

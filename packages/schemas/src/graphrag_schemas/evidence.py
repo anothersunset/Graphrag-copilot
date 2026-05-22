@@ -7,6 +7,7 @@ natural-language hit — so the auditor (and the frontend) can cite a
 specific node *or edge* and the eval layer can compute provenance
 sufficiency.
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -104,7 +105,4 @@ class EvidencePack(BaseModel):
         return [n.id for n in self.graph_nodes]
 
     def path_ids(self) -> list[str]:
-        return [
-            "->".join(n.id for n in p.nodes) + f"@d{p.depth}"
-            for p in self.graph_paths
-        ]
+        return ["->".join(n.id for n in p.nodes) + f"@d{p.depth}" for p in self.graph_paths]

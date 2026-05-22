@@ -13,10 +13,12 @@ We combine two signals:
 Final score = ``alpha * relevance + (1 - alpha) * coverage`` and is
 mapped to a decision via the thresholds locked in the v3.1 spec.
 """
+
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Callable, Literal, Sequence
+from typing import Literal
 
 CragDecision = Literal["use", "rewrite", "fallback"]
 Scorer = Callable[[str, Sequence[str]], list[float]]
@@ -77,7 +79,9 @@ class CragScorer:
             raw = self._scorer(query, contents)
             relevance = sum(raw) / len(raw) if raw else 0.0
         else:
-            rerank_scores = [h.get("rerank_score") for h in top if h.get("rerank_score") is not None]
+            rerank_scores = [
+                h.get("rerank_score") for h in top if h.get("rerank_score") is not None
+            ]
             if rerank_scores:
                 relevance = sum(rerank_scores) / len(rerank_scores)
             else:
@@ -86,7 +90,9 @@ class CragScorer:
 
         # Coverage: fraction of hits whose effective score >= coverage_floor.
         effective = [
-            float(h.get("rerank_score") if h.get("rerank_score") is not None else h.get("score", 0.0))
+            float(
+                h.get("rerank_score") if h.get("rerank_score") is not None else h.get("score", 0.0)
+            )
             for h in top
         ]
         coverage = sum(1 for s in effective if s >= self.coverage_floor) / len(effective)

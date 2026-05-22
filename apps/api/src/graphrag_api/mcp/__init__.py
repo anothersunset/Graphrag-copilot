@@ -1,4 +1,5 @@
 """MCP server surface for GraphRAG Copilot."""
+
 from .server import build_mcp_app
 from .tools import TOOL_REGISTRY, ToolSpec
 

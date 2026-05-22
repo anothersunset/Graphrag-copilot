@@ -1,4 +1,5 @@
 """KG retriever — static-triples test double."""
+
 from __future__ import annotations
 
 import asyncio
