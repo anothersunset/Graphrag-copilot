@@ -1,0 +1,19 @@
+{
+  "name": "graphrag-copilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agentic GraphRAG copilot — JS workspace root",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @graphrag/web dev",
+    "build": "pnpm -r --filter @graphrag/web build",
+    "lint": "pnpm -r --filter @graphrag/web lint",
+    "typecheck": "pnpm -r --filter @graphrag/web typecheck",
+    "format": "pnpm -r --filter @graphrag/web format"
+  },
+  "devDependencies": {}
+}
