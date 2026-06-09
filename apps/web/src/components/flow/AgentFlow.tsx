@@ -3,6 +3,7 @@
 import { Background, Controls, MiniMap, type Node, ReactFlow } from "@xyflow/react"
 import { useMemo, useState } from "react"
 import "@xyflow/react/dist/style.css"
+import "@/styles/flow.css"
 import type { RunResponse } from "@/lib/api"
 import { AuditDrawer } from "./AuditDrawer"
 import { buildLayout } from "./nodes"

@@ -92,15 +92,13 @@ def answer_accuracy(point_coverage: float) -> float:
     return point_coverage
 
 
-def faithfulness(answer: str, contexts: List[str]) -> float:
+def faithfulness(answer: str, contexts: List[str], *, use_llm: bool = False) -> float:
     """Faithfulness: 答案是否被上下文支持.
-
-    简化实现: 检查答案中的关键句子是否在上下文中有依据。
-    实际生产中应使用 LLM 判断。
 
     Args:
         answer: 系统生成的答案
         contexts: 检索到的上下文列表
+        use_llm: 是否使用 LLM Judge（更准确但更慢）
 
     Returns:
         忠实度 [0, 1]
@@ -108,8 +106,13 @@ def faithfulness(answer: str, contexts: List[str]) -> float:
     if not answer or not contexts:
         return 0.0
 
-    # 简化实现: 将答案按句拆分，检查每句是否有上下文支持
-    # 实际应使用 NLI 模型或 LLM judge
+    if use_llm:
+        return _faithfulness_llm(answer, contexts)
+    return _faithfulness_keyword(answer, contexts)
+
+
+def _faithfulness_keyword(answer: str, contexts: List[str]) -> float:
+    """关键词匹配版 faithfulness（快速但不精确）."""
     sentences = [s.strip() for s in answer.replace("。", ".").replace("；", ";").split(".") if s.strip()]
     if not sentences:
         return 0.0
@@ -117,14 +120,69 @@ def faithfulness(answer: str, contexts: List[str]) -> float:
     context_text = " ".join(contexts).lower()
     supported = 0
     for sent in sentences:
-        # 简化: 检查句子中的关键词是否在上下文中出现
         keywords = [w for w in sent.split() if len(w) > 1]
         if keywords:
             hit = sum(1 for kw in keywords if kw.lower() in context_text)
-            if hit / len(keywords) > 0.3:  # 阈值可调
+            if hit / len(keywords) > 0.3:
                 supported += 1
 
     return supported / len(sentences)
+
+
+def _faithfulness_llm(answer: str, contexts: List[str]) -> float:
+    """LLM Judge 版 faithfulness（更准确）."""
+    import os
+    import requests as req
+
+    api_url = os.getenv("LLM_API_URL", "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions")
+    api_key = os.getenv("LLM_API_KEY", "")
+    model = os.getenv("LLM_MODEL", "mimo-v2.5-pro")
+
+    if not api_key:
+        return _faithfulness_keyword(answer, contexts)
+
+    context_text = "\n\n".join([f"[{i+1}] {c[:500]}" for i, c in enumerate(contexts[:5])])
+
+    system_prompt = """你是答案忠实度评判专家。判断答案中的每个事实声明是否被上下文支持。
+
+输出严格 JSON:
+{"supported": 数量, "total": 总数量, "score": 0.0-1.0}
+
+规则:
+1. 将答案拆分为独立的事实声明
+2. 检查每个声明是否在上下文中有直接依据
+3. 计算被支持的声明比例"""
+
+    user_prompt = f"答案:\n{answer}\n\n上下文:\n{context_text}"
+
+    try:
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+        payload = {
+            "model": model,
+            "temperature": 0.0,
+            "max_tokens": 300,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        resp = req.post(api_url, json=payload, headers=headers, timeout=30)
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+
+        # 解析 JSON
+        import json
+        clean = content.strip()
+        if clean.startswith("```"):
+            clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+            if clean.endswith("```"):
+                clean = clean[:-3]
+            clean = clean.strip()
+
+        parsed = json.loads(clean)
+        return float(parsed.get("score", 0.0))
+    except Exception:
+        return _faithfulness_keyword(answer, contexts)
 
 
 def hallucination_rate(answer: str, contexts: List[str]) -> float:

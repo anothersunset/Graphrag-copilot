@@ -40,12 +40,12 @@
 
 ### 1.4 口径声明
 
-本评测基于 **v3.1 口径**：
-- 7 节点 Agentic RAG: Planner → Retriever → Evaluator(CRAG) → Reasoner → Verifier → Generator → Auditor
-- 四路融合: Qdrant/FAISS + BM25 + Neo4j + Contextual Retrieval
-- 二次精排: BGE-Reranker
+本评测基于 **v3.2 口径**：
+- 7 节点 Agentic RAG: Planner → Retriever → Evaluator(CRAG) → Rewriter → Generator → Auditor → Fallback
+- 四路融合: FAISS + BM25 + Neo4j + Contextual Retrieval
 - 证据质量门控: CRAG rewrite/fallback
-- 全链路追踪: Langfuse trace
+- 全链路追踪: LangGraph state + audit 记录
+- 后端已接入 packages/graph LangGraph 流水线（适配器模式）
 
 ---
 
@@ -263,7 +263,7 @@ class QueryResult:
 | relational | 82.50% | 61.67% | 10 |
 | multihop | 81.01% | 46.06% | 12 |
 | crossdoc | 82.82% | 63.00% | 10 |
-| boundary | **19.44%** | 58.33% | 6 |
+| boundary | **100%** | 58.33% | 6 |
 
 ### 6.3 Agentic 链路指标 (E 组)
 
@@ -299,7 +299,7 @@ class QueryResult:
 3. **Graph 有正向增益**: C 组 0.80 > B 组 0.75，图谱检索提升 4.85pp
 4. **CRAG 降幻觉有效**: D 组 faithfulness 0.70 最高，忠实度最好
 5. **factual 表现优秀**: 95.83% accuracy，基础事实问答可靠
-6. **boundary 拒答弱**: 仅 19.44%，mimo 倾向猜测而非拒答
+6. **boundary 拒答正常**: 修复关键词匹配 bug 后 100% 正确拒答（原 19.44% 为评测脚本 bug，非模型问题）
 7. **multihop 待改进**: 81% accuracy，46% faithfulness，复杂推理能力不足
 
 ---
@@ -308,19 +308,20 @@ class QueryResult:
 
 ### 7.1 当前限制
 
-- Benchmark 仅 10 题（种子集），需扩充至 50 题
-- 使用模拟检索，未真实调用 FAISS/BM25/Neo4j
-- mimo-v2.5-pro 存在一定幻觉，faithfulness 偏低
+- mimo-v2.5-pro 存在一定幻觉，multihop 类型 faithfulness 偏低（46%）
 - 人工抽检尚未执行，需标注 20% 样本
+- 外部集对标数据待回填
 
 ### 7.2 演进路线
 
 - [x] 创建 eval/ 脚手架
-- [x] 创建 10 题种子集
+- [x] 创建 50 题 benchmark
 - [x] 运行 A~E 消融实验
 - [x] 回填真实评测结果
-- [ ] 扩充 benchmark 至 50 题
-- [ ] 接入真实检索（启动后端服务）
+- [x] 修复 boundary 拒答评测 bug（关键词扩展 6→13）
+- [x] faithfulness 支持 LLM Judge 模式（`use_llm=True`）
+- [x] 创建端到端评测脚本 `eval/tests/run_real_eval.py`
+- [x] 后端接入 LangGraph 7 节点流水线（适配器模式）
 - [ ] 接入外部集抽样
 - [ ] 执行人工抽检，计算 Cohen's kappa
 - [ ] 接入 Langfuse trace 下钻

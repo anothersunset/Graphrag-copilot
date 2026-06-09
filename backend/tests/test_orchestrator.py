@@ -1,7 +1,7 @@
-"""Tests for app.agents.orchestrator.MultiAgentOrchestrator"""
+"""Tests for app.agents.orchestrator — LangGraphOrchestrator and LegacyOrchestrator"""
 
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 
 # Mock the module-level imports before importing the orchestrator
@@ -14,18 +14,19 @@ def mock_services():
         "app.services.bm25_store": MagicMock(),
         "app.services.kg_service": MagicMock(),
         "app.services.evidence_fusion": MagicMock(),
+        "graphrag_graph.graph": MagicMock(),
+        "graphrag_graph.config": MagicMock(),
+        "graphrag_graph.state": MagicMock(),
+        "app.agents.retriever_adapters": MagicMock(),
     }):
         yield
 
 
-class TestMultiAgentOrchestrator:
-    """Test suite for the multi-agent orchestrator."""
+class TestLegacyOrchestrator:
+    """Test suite for the legacy multi-agent orchestrator."""
 
     def test_完整流程返回所有字段(self, mock_services):
         """完整流程应返回所有预期字段。"""
-        from unittest.mock import MagicMock
-
-        # Create mock agents
         mock_query = MagicMock()
         mock_query.analyze.return_value = {
             "intent": "query",
@@ -67,15 +68,14 @@ class TestMultiAgentOrchestrator:
         mock_generation = MagicMock()
         mock_generation.generate.return_value = "Final answer with sources."
 
-        # Patch the orchestrator class
         with patch("app.agents.orchestrator.QueryUnderstandingAgent", return_value=mock_query), \
              patch("app.agents.orchestrator.RetrievalAgent", return_value=mock_retrieval), \
              patch("app.agents.orchestrator.ReasoningAgent", return_value=mock_reasoning), \
              patch("app.agents.orchestrator.VerificationAgent", return_value=mock_verification), \
              patch("app.agents.orchestrator.GenerationAgent", return_value=mock_generation):
 
-            from app.agents.orchestrator import MultiAgentOrchestrator
-            orchestrator = MultiAgentOrchestrator()
+            from app.agents.orchestrator import LegacyOrchestrator
+            orchestrator = LegacyOrchestrator()
             result = orchestrator.process_query("What is test?", top_k=5)
 
         assert isinstance(result, dict)
@@ -121,8 +121,8 @@ class TestMultiAgentOrchestrator:
              patch("app.agents.orchestrator.VerificationAgent", return_value=mock_verification), \
              patch("app.agents.orchestrator.GenerationAgent", return_value=mock_generation):
 
-            from app.agents.orchestrator import MultiAgentOrchestrator
-            orchestrator = MultiAgentOrchestrator()
+            from app.agents.orchestrator import LegacyOrchestrator
+            orchestrator = LegacyOrchestrator()
             result = orchestrator.process_query("test", top_k=5)
 
         assert isinstance(result, dict)
@@ -166,8 +166,8 @@ class TestMultiAgentOrchestrator:
              patch("app.agents.orchestrator.VerificationAgent", return_value=mock_verification), \
              patch("app.agents.orchestrator.GenerationAgent", return_value=mock_generation):
 
-            from app.agents.orchestrator import MultiAgentOrchestrator
-            orchestrator = MultiAgentOrchestrator()
+            from app.agents.orchestrator import LegacyOrchestrator
+            orchestrator = LegacyOrchestrator()
             result = orchestrator.process_query("Unknown topic?", top_k=5)
 
         assert "answer" in result
@@ -212,9 +212,64 @@ class TestMultiAgentOrchestrator:
              patch("app.agents.orchestrator.VerificationAgent", return_value=mock_verification), \
              patch("app.agents.orchestrator.GenerationAgent", return_value=mock_generation):
 
-            from app.agents.orchestrator import MultiAgentOrchestrator
-            orchestrator = MultiAgentOrchestrator()
+            from app.agents.orchestrator import LegacyOrchestrator
+            orchestrator = LegacyOrchestrator()
             result = orchestrator.process_query("Ambiguous?", top_k=5)
 
         assert result["confidence"] < 0.5
         assert "注意" in result["answer"] or result["confidence"] < 0.5
+
+
+class TestLangGraphOrchestrator:
+    """Test suite for the LangGraph orchestrator."""
+
+    def test_初始化成功(self, mock_services):
+        """LangGraphOrchestrator 应能成功初始化。"""
+        from app.agents.orchestrator import LangGraphOrchestrator
+        orchestrator = LangGraphOrchestrator()
+        assert orchestrator is not None
+
+    def test_格式化响应包含所有字段(self, mock_services):
+        """_format_response 应返回所有预期字段。"""
+        from app.agents.orchestrator import LangGraphOrchestrator
+        orchestrator = LangGraphOrchestrator()
+
+        mock_state = {
+            "answer": "Test answer",
+            "fused_hits": [
+                {"content": "doc1", "source": "vector", "rerank_score": 0.9, "chunk_id": "c1"},
+            ],
+            "citations": [{"chunk_id": "c1", "span": "test", "confidence": 0.8}],
+            "audit": [
+                {"node": "planner", "summary": "planned"},
+                {"node": "retriever", "summary": "retrieved"},
+            ],
+            "crag_score": 0.85,
+            "crag_decision": "use",
+            "auditor_verdict": "pass",
+            "tool_calls": [],
+            "rewrite_iteration": 0,
+        }
+
+        result = orchestrator._format_response("test query", mock_state)
+
+        assert result["query"] == "test query"
+        assert result["answer"] == "Test answer"
+        assert len(result["sources"]) == 1
+        assert result["confidence"] == 0.85
+        assert result["crag_decision"] == "use"
+        assert result["auditor_verdict"] == "pass"
+        assert "trace" in result
+        assert "nodes" in result["trace"]
+
+    def test_空状态返回默认值(self, mock_services):
+        """空状态应返回默认值。"""
+        from app.agents.orchestrator import LangGraphOrchestrator
+        orchestrator = LangGraphOrchestrator()
+
+        mock_state = {}
+        result = orchestrator._format_response("test", mock_state)
+
+        assert result["answer"] == "当前信息不足，无法回答。"
+        assert result["sources"] == []
+        assert result["confidence"] == 0.0

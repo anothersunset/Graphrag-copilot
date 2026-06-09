@@ -1,25 +1,140 @@
-from typing import List, Dict, Any, Generator
-from dataclasses import dataclass
-from enum import Enum
+"""GraphRAG Copilot — 多智能体编排器.
 
-from app.services.llm_service import llm_service
-from app.services.vector_store import vector_store, embedding_service
-from app.services.bm25_store import bm25_store
-from app.services.kg_service import kg_service
-from app.services.evidence_fusion import evidence_fusion_service
+v3.2: 接入 packages/graph 的 LangGraph 7 节点流水线:
+  planner → retriever → evaluator(CRAG) → [rewriter → retriever] → generator → auditor
 
-class AgentType(Enum):
-    QUERY_UNDERSTANDING = "query_understanding"
-    RETRIEVAL = "retrieval"
-    REASONING = "reasoning"
-    VERIFICATION = "verification"
-    GENERATION = "generation"
+保留旧版 MultiAgentOrchestrator 作为 LegacyOrchestrator 备选。
+"""
+from __future__ import annotations
 
-@dataclass
-class AgentMessage:
-    agent_type: AgentType
-    content: Any
-    metadata: Dict[str, Any] | None = None
+import logging
+from typing import Any, Dict, Generator, List
+
+logger = logging.getLogger(__name__)
+
+
+def _get_llm_service():
+    from app.services.llm_service import llm_service
+    return llm_service
+
+
+def _get_vector_store():
+    from app.services.vector_store import vector_store, embedding_service
+    return vector_store, embedding_service
+
+
+def _get_bm25_store():
+    from app.services.bm25_store import bm25_store
+    return bm25_store
+
+
+def _get_kg_service():
+    from app.services.kg_service import kg_service
+    return kg_service
+
+
+def _get_evidence_fusion():
+    from app.services.evidence_fusion import evidence_fusion_service
+    return evidence_fusion_service
+
+
+# ─────────────────── LLM 适配器 ───────────────────
+
+
+class LLMAdapter:
+    """将 backend 的 LLMService 适配为 packages/graph 期望的 llm_client 接口.
+
+    packages/graph 的 generator_node 调用:
+        llm.complete(model=..., system=..., user=..., timeout_s=...)
+    """
+
+    def complete(self, *, model: str = "", system: str = "", user: str = "", timeout_s: float = 30.0) -> str:
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        if user:
+            messages.append({"role": "user", "content": user})
+        return _get_llm_service().chat(messages)
+
+
+# ─────────────────── LangGraph 编排器 ───────────────────
+
+
+class LangGraphOrchestrator:
+    """基于 packages/graph 的 7 节点 Agentic RAG 编排器.
+
+    流程: planner → retriever → evaluator(CRAG) → [rewriter → retriever] → generator → auditor
+    """
+
+    def __init__(self):
+        from graphrag_graph.graph import build_graph
+        from graphrag_graph.config import GraphConfig
+        from app.agents.retriever_adapters import build_retrievers
+
+        self._graph = build_graph(
+            config=GraphConfig(
+                enable_kg=True,
+                max_rewrites=2,
+                max_hits=20,
+                top_k_after_rerank=5,
+            ),
+            retrievers=build_retrievers(),
+            llm_client=LLMAdapter(),
+        )
+
+    def process_query(self, query: str, top_k: int = 10) -> Dict[str, Any]:
+        from graphrag_graph.state import initial_state
+
+        state = initial_state(query)
+        result = self._graph.invoke(state)
+        return self._format_response(query, result)
+
+    def _format_response(self, query: str, state: dict) -> Dict[str, Any]:
+        """将 LangGraph state 转换为 API 响应格式."""
+        answer = state.get("answer", "当前信息不足，无法回答。")
+        fused_hits = state.get("fused_hits", [])
+        citations = state.get("citations", [])
+        audit_entries = state.get("audit", [])
+
+        # 构造 sources 列表
+        sources = []
+        for hit in fused_hits[:5]:
+            sources.append({
+                "content": hit.get("content", "")[:300],
+                "source": hit.get("source", ""),
+                "score": hit.get("rerank_score") or hit.get("score", 0.0),
+                "chunk_id": hit.get("chunk_id", ""),
+            })
+
+        # 构造 trace（7 节点执行记录）
+        trace_nodes = []
+        for entry in audit_entries:
+            node_name = entry.get("node", "")
+            if node_name and node_name not in trace_nodes:
+                trace_nodes.append(node_name)
+
+        return {
+            "query": query,
+            "answer": answer,
+            "sources": sources,
+            "citations": [
+                {"chunk_id": c.get("chunk_id", ""), "span": c.get("span", ""), "confidence": c.get("confidence", 0.0)}
+                for c in citations
+            ],
+            "confidence": state.get("crag_score", 0.0),
+            "crag_decision": state.get("crag_decision", "unknown"),
+            "auditor_verdict": state.get("auditor_verdict", "unknown"),
+            "trace": {
+                "nodes": trace_nodes,
+                "audit": audit_entries,
+                "tool_calls": state.get("tool_calls", []),
+                "rewrite_iteration": state.get("rewrite_iteration", 0),
+            },
+        }
+
+
+# ─────────────────── 旧版编排器（保留备选） ───────────────────
+
 
 class QueryUnderstandingAgent:
     def analyze(self, query: str) -> Dict[str, Any]:
@@ -32,7 +147,7 @@ class QueryUnderstandingAgent:
             {"role": "user", "content": query},
         ]
 
-        result = llm_service.chat_json(messages)
+        result = _get_llm_service().chat_json(messages)
         return {
             "intent": result.get("intent", "query"),
             "entities": result.get("entities", []),
@@ -42,6 +157,7 @@ class QueryUnderstandingAgent:
             "query_rewrite": result.get("query_rewrite", query) or query,
             "original_query": query,
         }
+
 
 class RetrievalAgent:
     def hybrid_search(self, query: str, entities: List[str], top_k: int = 10) -> Dict[str, Any]:
@@ -54,30 +170,33 @@ class RetrievalAgent:
         }
 
         try:
-            query_embedding = embedding_service.embed_query(query)
-            results["vector_results"] = vector_store.search(query_embedding, top_k=top_k)
+            vs, es = _get_vector_store()
+            query_embedding = es.embed_query(query)
+            results["vector_results"] = vs.search(query_embedding, top_k=top_k)
         except Exception as e:
             results["warnings"].append("vector_search_failed: " + str(e))
 
         try:
-            results["bm25_results"] = bm25_store.search(query, top_k=top_k)
+            results["bm25_results"] = _get_bm25_store().search(query, top_k=top_k)
         except Exception as e:
             results["warnings"].append("bm25_search_failed: " + str(e))
 
         if entities:
             try:
-                results["graph_results"] = kg_service.graph_rag_search(entities, query, depth=2)
+                results["graph_results"] = _get_kg_service().graph_rag_search(entities, query, depth=2)
             except Exception as e:
                 results["warnings"].append("graph_search_failed: " + str(e))
 
-        fused = evidence_fusion_service.fuse(
+        ef = _get_evidence_fusion()
+        fused = ef.fuse(
             vector_results=results["vector_results"],
             bm25_results=results["bm25_results"],
             graph_results=results["graph_results"],
             top_k=top_k,
         )
-        results["combined_context"] = evidence_fusion_service.compress_context(fused)
+        results["combined_context"] = ef.compress_context(fused)
         return results
+
 
 class ReasoningAgent:
     def reason(self, query: str, context: List[Dict[str, Any]], analysis: Dict[str, Any]) -> Dict[str, Any]:
@@ -110,7 +229,7 @@ class ReasoningAgent:
             {"role": "user", "content": "问题: " + query + "\n\n问题分析: " + str(analysis) + "\n\n上下文:\n" + context_text},
         ]
 
-        result = llm_service.chat_json(messages)
+        result = _get_llm_service().chat_json(messages)
         return {
             "answer": result.get("answer", "当前信息不足，无法回答。"),
             "reasoning_path": result.get("reasoning_path", []),
@@ -119,10 +238,12 @@ class ReasoningAgent:
             "limitations": result.get("limitations", ""),
         }
 
+
 class VerificationAgent:
     def verify(self, query: str, answer: str, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
         source_texts = [s.get("content", "") for s in sources[:5]]
-        return llm_service.verify_answer(query, answer, source_texts)
+        return _get_llm_service().verify_answer(query, answer, source_texts)
+
 
 class GenerationAgent:
     def generate(self, reasoning_result: Dict[str, Any], verification_result: Dict[str, Any]) -> str:
@@ -148,7 +269,10 @@ class GenerationAgent:
 
         return final_answer
 
-class MultiAgentOrchestrator:
+
+class LegacyOrchestrator:
+    """旧版 5 节点手动编排（保留作为 fallback）."""
+
     def __init__(self):
         self.query_agent = QueryUnderstandingAgent()
         self.retrieval_agent = RetrievalAgent()
@@ -200,8 +324,12 @@ class MultiAgentOrchestrator:
             },
         }
 
+
+# ─────────────────── 流式编排器 ───────────────────
+
+
 class StreamingReasoningAgent:
-    """流式推理 Agent - 逐 token 输出答案"""
+    """流式推理 Agent - 逐 token 输出答案."""
 
     def reason_stream(self, query: str, context: List[Dict[str, Any]], analysis: Dict[str, Any]) -> Generator[str, None, None]:
         context_text = "\n\n".join([
@@ -226,11 +354,11 @@ class StreamingReasoningAgent:
             {"role": "user", "content": "问题: " + query + "\n\n问题分析: " + str(analysis) + "\n\n上下文:\n" + context_text},
         ]
 
-        yield from llm_service.chat_stream(messages)
+        yield from _get_llm_service().chat_stream(messages)
 
 
 class StreamingOrchestrator:
-    """流式编排器 - 前置步骤同步，LLM 生成流式输出"""
+    """流式编排器 - 前置步骤同步，LLM 生成流式输出."""
 
     def __init__(self):
         self.query_agent = QueryUnderstandingAgent()
@@ -297,5 +425,18 @@ class StreamingOrchestrator:
         }
 
 
-orchestrator = MultiAgentOrchestrator()
+# ─────────────────── 实例化 ───────────────────
+
+def _create_orchestrator():
+    """尝试创建 LangGraph 编排器，失败则回退到旧版."""
+    try:
+        orch = LangGraphOrchestrator()
+        logger.info("使用 LangGraph 7 节点编排器")
+        return orch
+    except Exception:
+        logger.exception("LangGraph 编排器初始化失败，回退到 LegacyOrchestrator")
+        return LegacyOrchestrator()
+
+
+orchestrator = _create_orchestrator()
 stream_orchestrator = StreamingOrchestrator()
