@@ -90,26 +90,33 @@ def check_answer_quality(answer: str, case: GoldCase) -> dict:
     refusal_keywords = ["没有找到", "无法回答", "信息不足", "不确定", "不知道", "没有相关信息"]
     is_refusal = any(kw in answer_lower for kw in refusal_keywords)
 
-    # 检查要点覆盖
+    # boundary 类型: 用拒答正确率代替要点覆盖率
+    if case.type == "boundary":
+        refusal_keywords = [
+            "没有找到", "无法回答", "信息不足", "不确定", "不知道",
+            "没有相关信息", "知识库中没有", "未提供", "未找到",
+            "无法确定", "无法提供", "缺少信息", "没有足够"
+        ]
+        is_refusal = any(kw in answer_lower for kw in refusal_keywords)
+        return {
+            "point_coverage": 1.0 if is_refusal else 0.0,
+            "is_refusal": is_refusal,
+            "refusal_correct": is_refusal,
+        }
+
+    # 非 boundary: 按要点覆盖率评估
     covered = 0
     for point in case.gold_answer_points:
-        # 提取关键词（取前4个字）
         keywords = [point[i:i+4] for i in range(0, len(point), 4)][:3]
         if any(kw.lower() in answer_lower for kw in keywords):
             covered += 1
 
     point_coverage = covered / len(case.gold_answer_points) if case.gold_answer_points else 0.0
 
-    # 边界拒答判定
-    if case.type == "boundary":
-        refusal_correct = is_refusal
-    else:
-        refusal_correct = True  # 非 boundary 不评判
-
     return {
         "point_coverage": point_coverage,
         "is_refusal": is_refusal,
-        "refusal_correct": refusal_correct,
+        "refusal_correct": True,
     }
 
 

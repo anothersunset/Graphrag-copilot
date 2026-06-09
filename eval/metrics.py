@@ -155,12 +155,13 @@ def boundary_refusal_rate(result: QueryResult, case: GoldCase) -> float:
         return 0.0
 
     # 检查答案是否包含拒答关键词
-    refusal_keywords = ["无法回答", "没有找到", "信息不足", "知识库中没有", "不确定", "无法确定"]
+    refusal_keywords = [
+        "没有找到", "无法回答", "信息不足", "不确定", "不知道",
+        "没有相关信息", "知识库中没有", "未提供", "未找到",
+        "无法确定", "无法提供", "缺少信息", "没有足够"
+    ]
     answer_lower = result.answer.lower()
-    for kw in refusal_keywords:
-        if kw in answer_lower:
-            return 1.0
-    return 0.0
+    return 1.0 if any(kw in answer_lower for kw in refusal_keywords) else 0.0
 
 
 # ─────────────────────────── 第三层：Agentic 链路 ───────────────────────────

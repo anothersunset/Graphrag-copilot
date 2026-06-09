@@ -61,8 +61,18 @@ def mock_retrieval(case: GoldCase, config: dict) -> list:
 
 
 def check_answer(answer: str, case: GoldCase) -> float:
-    """检查要点覆盖率."""
+    """检查要点覆盖率 (boundary 类型用拒答正确率)."""
     answer_lower = answer.lower()
+
+    # boundary 类型: 正确拒答得 1.0，否则 0.0
+    if case.type == "boundary":
+        refusal_keywords = [
+            "没有找到", "无法回答", "信息不足", "不确定", "不知道",
+            "没有相关信息", "知识库中没有", "未提供", "未找到",
+            "无法确定", "无法提供", "缺少信息", "没有足够"
+        ]
+        return 1.0 if any(kw in answer_lower for kw in refusal_keywords) else 0.0
+
     covered = sum(1 for p in case.gold_answer_points if any(
         p[i:i+4].lower() in answer_lower for i in range(0, len(p), 4)
     ))
