@@ -302,6 +302,18 @@ class QueryResult:
 6. **boundary 拒答正常**: 修复关键词匹配 bug 后 100% 正确拒答（原 19.44% 为评测脚本 bug，非模型问题）
 7. **multihop 待改进**: 81% accuracy，46% faithfulness，复杂推理能力不足
 
+### 6.7 优化措施（v3.2）
+
+基于测试结果，已执行以下优化：
+
+| 优化项 | 改动 | 预期效果 |
+|--------|------|----------|
+| Generator prompt 强化 | 中文 prompt + 强制引用 [chunk:N] + 禁止编造 | 提升 multihop faithfulness |
+| BM25 权重调优 | VECTOR_WEIGHT 0.55→0.65, BM25_WEIGHT 0.25→0.15 | 降低 B 组噪声 |
+| BM25 过滤 | score < 0.1 的 BM25 结果被过滤 | 进一步降噪 |
+| Planner LLM 推理 | 用 LLM 分析问题类型，动态选择检索策略 | multihop 自动加 KG |
+| Rewriter LLM 改写 | 用 LLM 改写查询，multihop 拆分子问题 | CRAG rewrite 有效 |
+
 ---
 
 ## 7. 已知限制与演进
@@ -322,6 +334,10 @@ class QueryResult:
 - [x] faithfulness 支持 LLM Judge 模式（`use_llm=True`）
 - [x] 创建端到端评测脚本 `eval/tests/run_real_eval.py`
 - [x] 后端接入 LangGraph 7 节点流水线（适配器模式）
+- [x] 强化 Generator prompt（中文 + 强制引用 + 禁止编造）
+- [x] 调优 BM25 权重（0.25→0.15）+ 过滤低分结果
+- [x] 实现 Planner LLM 推理（动态选择检索策略）
+- [x] 实现 Rewriter LLM 改写（multihop 拆分子问题）
 - [ ] 接入外部集抽样
 - [ ] 执行人工抽检，计算 Cohen's kappa
 - [ ] 接入 Langfuse trace 下钻

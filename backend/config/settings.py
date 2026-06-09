@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 100 * 1024 * 1024
 
     GRAPH_SEARCH_DEPTH: int = 2
-    VECTOR_WEIGHT: float = 0.55
-    BM25_WEIGHT: float = 0.25
+    VECTOR_WEIGHT: float = 0.65
+    BM25_WEIGHT: float = 0.15
     GRAPH_WEIGHT: float = 0.20
     VERIFICATION_THRESHOLD: float = 0.8
 
