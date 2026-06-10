@@ -23,6 +23,19 @@ from eval.datasets import load_benchmark
 from eval.metrics import compute_metrics
 
 
+def _wait_for_backend(base_url: str, log, max_wait: int = 60):
+    """等待后端恢复健康."""
+    import urllib.request
+    import urllib.error
+    for _ in range(max_wait // 5):
+        try:
+            urllib.request.urlopen(f"{base_url}/health", timeout=5)
+            return
+        except Exception:
+            time.sleep(5)
+    log.warning("Backend not healthy after %ds wait", max_wait)
+
+
 def check_answer(answer: str, case: GoldCase) -> float:
     """检查要点覆盖率 (boundary 类型用拒答正确率)."""
     answer_lower = answer.lower()
@@ -96,6 +109,10 @@ def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
     start_time = time.time()
 
     for i, case in enumerate(cases):
+        # 每 5 题检查后端健康
+        if i > 0 and i % 5 == 0:
+            _wait_for_backend(base_url, log)
+
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -119,6 +136,8 @@ def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
                     log.warning("[%d/%d] %s attempt %d failed, retrying in %ds: %s",
                                 i+1, len(cases), case.id, attempt+1, wait, str(e)[:80])
                     time.sleep(wait)
+                    # 重试前检查后端健康
+                    _wait_for_backend(base_url, log)
                 else:
                     errors += 1
                     log.error("[%d/%d] ERR %s (after %d attempts): %s",
