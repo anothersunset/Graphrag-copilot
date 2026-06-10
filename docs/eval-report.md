@@ -247,22 +247,63 @@ class QueryResult:
 
 ### 6.0 LangGraph 5 节点流水线评测（2026-06-10）
 
-后端已接入 packages/graph 的 LangGraph 流水线，使用 10 题精简评测验证：
+后端已接入 packages/graph 的 LangGraph 流水线，使用 50 题 benchmark 完整评测。
 
-| 类型 | Accuracy | 数量 | 说明 |
-|------|----------|------|------|
-| factual | 0.667 | 3 | 1 题偶发 LLM 空响应（重测通过） |
-| relational | 1.000 | 2 | 全部正确，含 [chunk:N] 引用 |
-| multihop | 0.678 | 3 | 多步推理基本正确，部分要点遗漏 |
-| boundary | 0.750 | 2 | 1 题正确拒答，1 题部分回答 |
-| **总体** | **0.753** | **10** | 引用率 80%，平均延迟 48.5s |
+#### 6.0.1 三层指标总览
+
+| 层级 | 指标 | 值 | 说明 |
+|------|------|-----|------|
+| **链路质量** | Trace Completeness | **1.0000** | 50/50 题全部 5 节点完整执行 |
+| **链路质量** | Audit Coverage | **1.0000** | 50/50 题 auditor 全部覆盖 |
+| **链路质量** | Verifier Pass Rate | **1.0000** | 50/50 题 generator 全部执行 |
+| **答案质量** | Answer Accuracy | **0.6825** | 要点覆盖率，受 crossdoc 拖累 |
+| **答案质量** | Faithfulness (关键词法) | 0.2074 | 关键词匹配法低估，需 LLM Judge |
+| **答案质量** | Boundary Refusal Rate | **0.8333** | 6 题中 5 题正确拒答 |
+| **检索质量** | Recall@5 | 0.1200 | gold_context_ids 未映射到真实 chunk_id |
+| **检索质量** | Citation Recall | 0.1200 | 同上，需映射修复 |
+| **效率** | Avg Latency | 47.4s | 含 LLM 推理 + 检索 |
+
+#### 6.0.2 按问题类型拆分
+
+| 类型 | N | Accuracy | Faith(kw) | Latency | 零分题 |
+|------|---|----------|-----------|---------|--------|
+| factual | 12 | 0.7917 | 0.3750 | 57.9s | 2 |
+| relational | 10 | 0.8667 | 0.1833 | 42.6s | 0 |
+| multihop | 12 | 0.6463 | 0.1781 | 50.5s | 2 |
+| crossdoc | 10 | 0.3202 | 0.1400 | 42.3s | 5 |
+| boundary | 6 | 0.8333 | 0.0833 | 36.8s | 1 |
+| **总体** | **50** | **0.6825** | **0.2074** | **47.4s** | **10** |
+
+#### 6.0.3 零分题分析
+
+| ID | 类型 | 原因分析 |
+|----|------|----------|
+| kb-factual-007 | factual | LLM 未从上下文提取正确信息 |
+| kb-factual-009 | factual | LLM 未从上下文提取正确信息 |
+| kb-multihop-004 | multihop | 多跳推理链断裂 |
+| kb-multihop-005 | multihop | 多跳推理链断裂 |
+| kb-crossdoc-001 | crossdoc | 跨文档证据融合失败 |
+| kb-crossdoc-003 | crossdoc | 跨文档证据融合失败 |
+| kb-crossdoc-005 | crossdoc | 跨文档证据融合失败 |
+| kb-crossdoc-006 | crossdoc | 跨文档证据融合失败 |
+| kb-crossdoc-009 | crossdoc | 跨文档证据融合失败 |
+| kb-boundary-001 | boundary | 未正确拒答 |
+
+#### 6.0.4 关键发现
+
+1. **链路质量完美**: Trace Completeness 和 Audit Coverage 均为 1.0，证明 5 节点流水线稳定运行
+2. **crossdoc 是最大短板**: 准确率仅 32%，5/10 零分，跨文档证据融合权重(GRAPH_WEIGHT=0.20)需调高
+3. **Faithfulness 关键词法不可靠**: 0.21 的值严重低估真实质量，必须用 LLM Judge
+4. **Recall@5 需修复**: gold_context_ids 未映射到真实 chunk_id，导致检索质量指标失真
+5. **relational 表现最好**: 86.67% 准确率，0 零分题
 
 **流水线节点**: planner → retriever → evaluator(CRAG) → generator → auditor（5 节点全部执行）
 
 **关键改进**:
 - JSON 解析：括号深度匹配替代贪婪正则，兼容推理模型输出
 - LangGraph 依赖：graphrag-schemas/graphrag-graph 正确安装到 Python 3.11 环境
-- 每查询置信度：factual 0.82 / relational 0.80 / multihop 0.91
+- 健康检查：每 5 题检查后端状态，3 次重试 + 指数退避
+- 日志系统：实时写入 `eval/results/real_eval.log`
 
 ### 6.1 消融总表
 
@@ -313,6 +354,17 @@ class QueryResult:
 
 ### 6.6 结论
 
+**真实评测（50 题，2026-06-10）：**
+
+1. **链路质量达标**: Trace Completeness = 1.0, Audit Coverage = 1.0，5 节点流水线稳定
+2. **relational 表现最好**: 86.67% accuracy，0 零分题
+3. **crossdoc 是最大短板**: 32% accuracy，5/10 零分，跨文档证据融合需加强
+4. **Faithfulness 需 LLM Judge**: 关键词法 0.21 严重低估，待 LLM Judge 重测
+5. **边界拒答基本正常**: 83.33%（5/6 正确拒答）
+6. **平均延迟 47.4s**: 可接受，含 LLM 推理 + 检索
+
+**消融实验（模拟数据）：**
+
 1. **Vector only 表现最佳**: A 组 accuracy 0.81 最高，说明基础向量检索已足够强
 2. **BM25 增益不明显**: 50 题样本下 B 组反而低于 A 组（0.75 vs 0.81）
 3. **Graph 有正向增益**: C 组 0.80 > B 组 0.75，图谱检索提升 4.85pp
@@ -360,6 +412,9 @@ class QueryResult:
 - [x] JSON 解析兼容推理模型（括号深度匹配）
 - [x] LangGraph 依赖安装与环境兼容性修复
 - [x] LangGraph 5 节点流水线端到端验证（10 题 smoke test 3/3 通过）
+- [x] 50 题完整评测（Trace Completeness=1.0, Audit Coverage=1.0）
+- [x] 评测日志系统（real_eval.log + 重试 + 健康检查）
+- [ ] LLM Judge faithfulness 重测（关键词法→LLM 法）
 - [ ] 接入外部集抽样
 - [ ] 执行人工抽检，计算 Cohen's kappa
 - [ ] 接入 Langfuse trace 下钻
