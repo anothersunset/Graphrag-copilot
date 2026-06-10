@@ -251,28 +251,47 @@ class QueryResult:
 
 #### 6.0.1 三层指标总览
 
+**关键词法（快速筛选）：**
+
 | 层级 | 指标 | 值 | 说明 |
 |------|------|-----|------|
 | **链路质量** | Trace Completeness | **1.0000** | 50/50 题全部 5 节点完整执行 |
 | **链路质量** | Audit Coverage | **1.0000** | 50/50 题 auditor 全部覆盖 |
 | **链路质量** | Verifier Pass Rate | **1.0000** | 50/50 题 generator 全部执行 |
 | **答案质量** | Answer Accuracy | **0.6825** | 要点覆盖率，受 crossdoc 拖累 |
-| **答案质量** | Faithfulness (关键词法) | 0.2074 | 关键词匹配法低估，需 LLM Judge |
+| **答案质量** | Faithfulness (关键词法) | 0.2074 | 关键词匹配法，快速但不精确 |
 | **答案质量** | Boundary Refusal Rate | **0.8333** | 6 题中 5 题正确拒答 |
 | **检索质量** | Recall@5 | 0.1200 | gold_context_ids 未映射到真实 chunk_id |
 | **检索质量** | Citation Recall | 0.1200 | 同上，需映射修复 |
 | **效率** | Avg Latency | 47.4s | 含 LLM 推理 + 检索 |
 
-#### 6.0.2 按问题类型拆分
+**LLM Judge（精确判定）：**
 
-| 类型 | N | Accuracy | Faith(kw) | Latency | 零分题 |
-|------|---|----------|-----------|---------|--------|
-| factual | 12 | 0.7917 | 0.3750 | 57.9s | 2 |
-| relational | 10 | 0.8667 | 0.1833 | 42.6s | 0 |
-| multihop | 12 | 0.6463 | 0.1781 | 50.5s | 2 |
-| crossdoc | 10 | 0.3202 | 0.1400 | 42.3s | 5 |
-| boundary | 6 | 0.8333 | 0.0833 | 36.8s | 1 |
-| **总体** | **50** | **0.6825** | **0.2074** | **47.4s** | **10** |
+| 层级 | 指标 | 值 | 说明 |
+|------|------|-----|------|
+| **链路质量** | Trace Completeness | **0.9920** | 重试导致 2 题 trace 不完整 |
+| **链路质量** | Audit Coverage | **0.9800** | 同上 |
+| **答案质量** | Answer Accuracy | **0.7164** | LLM 生成答案略有不同 |
+| **答案质量** | Faithfulness (LLM Judge) | **0.1794** | LLM 判定更严格 |
+| **效率** | Avg Latency | 39.4s | 略快于关键词法运行 |
+
+**两种方法对比：**
+
+| 指标 | 关键词法 | LLM Judge | 差异 |
+|------|---------|-----------|------|
+| Faithfulness | 0.2074 | 0.1794 | LLM 更严格 (-2.8pp) |
+| Answer Accuracy | 0.6825 | 0.7164 | LLM 生成答案略好 (+3.4pp) |
+
+#### 6.0.2 按问题类型拆分（关键词法 vs LLM Judge）
+
+| 类型 | N | Accuracy(kw) | Faith(kw) | Accuracy(LLM) | Faith(LLM) |
+|------|---|-------------|-----------|---------------|------------|
+| factual | 12 | 0.7917 | 0.3750 | 0.8750 | 0.3683 |
+| relational | 10 | 0.8667 | 0.1833 | 0.8670 | 0.0730 |
+| multihop | 12 | 0.6463 | 0.1781 | 0.6417 | 0.1408 |
+| crossdoc | 10 | 0.3202 | 0.1400 | 0.3950 | 0.2130 |
+| boundary | 6 | 0.8333 | 0.0833 | 0.8333 | 0.0000 |
+| **总体** | **50** | **0.6825** | **0.2074** | **0.7164** | **0.1794** |
 
 #### 6.0.3 零分题分析
 
@@ -339,9 +358,13 @@ class QueryResult:
 
 | 指标 | 值 |
 |------|-----|
-| 抽检 n | — |
-| 一致率 | — |
-| Cohen's kappa | — |
+| LLM Judge model | mimo-v2.5-pro |
+| Faithfulness (LLM) | 0.1794 |
+| Faithfulness (关键词法) | 0.2074 |
+| 差异 | -2.8pp（LLM 更严格） |
+| 人工抽检 n | 待执行 |
+| 人工一致率 | 待执行 |
+| Cohen's kappa | 待执行 |
 
 ### 6.5 外部集对标
 
@@ -354,14 +377,14 @@ class QueryResult:
 
 ### 6.6 结论
 
-**真实评测（50 题，2026-06-10）：**
+**真实评测（50 题，2026-06-10，关键词法 + LLM Judge 双测）：**
 
 1. **链路质量达标**: Trace Completeness = 1.0, Audit Coverage = 1.0，5 节点流水线稳定
 2. **relational 表现最好**: 86.67% accuracy，0 零分题
-3. **crossdoc 是最大短板**: 32% accuracy，5/10 零分，跨文档证据融合需加强
-4. **Faithfulness 需 LLM Judge**: 关键词法 0.21 严重低估，待 LLM Judge 重测
+3. **crossdoc 是最大短板**: 32~39% accuracy，跨文档证据融合需加强
+4. **Faithfulness LLM Judge 更严格**: 0.1794 vs 关键词法 0.2074，LLM 判定更准确
 5. **边界拒答基本正常**: 83.33%（5/6 正确拒答）
-6. **平均延迟 47.4s**: 可接受，含 LLM 推理 + 检索
+6. **平均延迟 39~47s**: 可接受，含 LLM 推理 + 检索
 
 **消融实验（模拟数据）：**
 
@@ -414,7 +437,7 @@ class QueryResult:
 - [x] LangGraph 5 节点流水线端到端验证（10 题 smoke test 3/3 通过）
 - [x] 50 题完整评测（Trace Completeness=1.0, Audit Coverage=1.0）
 - [x] 评测日志系统（real_eval.log + 重试 + 健康检查）
-- [ ] LLM Judge faithfulness 重测（关键词法→LLM 法）
+- [x] LLM Judge faithfulness 重测（50 题，faith=0.1794，比关键词法更严格）
 - [ ] 接入外部集抽样
 - [ ] 执行人工抽检，计算 Cohen's kappa
 - [ ] 接入 Langfuse trace 下钻
