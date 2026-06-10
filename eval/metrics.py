@@ -134,7 +134,8 @@ def _faithfulness_llm(answer: str, contexts: List[str]) -> float:
     import os
     import requests as req
 
-    api_url = os.getenv("LLM_API_URL", "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions")
+    base_url = os.getenv("LLM_BASE_URL", "https://token-plan-sgp.xiaomimimo.com/v1")
+    api_url = os.getenv("LLM_API_URL", base_url.rstrip("/") + "/chat/completions")
     api_key = os.getenv("LLM_API_KEY", "")
     model = os.getenv("LLM_MODEL", "mimo-v2.5-pro")
 

@@ -14,10 +14,11 @@ import requests
 from eval.graphrag_client import GoldCase, QueryResult
 
 
-# LLM API 配置
-LLM_API_URL = os.getenv("LLM_API_URL", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
-LLM_API_KEY = os.getenv("ZHIPU_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "glm-4-flash")
+# LLM API 配置（默认使用 mimo API，与后端一致）
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://token-plan-sgp.xiaomimimo.com/v1")
+LLM_API_URL = os.getenv("LLM_API_URL", LLM_BASE_URL.rstrip("/") + "/chat/completions")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "mimo-v2.5-pro")
 
 
 def _call_llm(messages: List[Dict[str, str]], temperature: float = 0.0) -> str:
