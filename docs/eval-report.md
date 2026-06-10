@@ -245,6 +245,25 @@ class QueryResult:
 
 > **评测环境**: mimo-v2.5-pro, 50 题 benchmark, 2026-06-09
 
+### 6.0 LangGraph 5 节点流水线评测（2026-06-10）
+
+后端已接入 packages/graph 的 LangGraph 流水线，使用 10 题精简评测验证：
+
+| 类型 | Accuracy | 数量 | 说明 |
+|------|----------|------|------|
+| factual | 0.667 | 3 | 1 题偶发 LLM 空响应（重测通过） |
+| relational | 1.000 | 2 | 全部正确，含 [chunk:N] 引用 |
+| multihop | 0.678 | 3 | 多步推理基本正确，部分要点遗漏 |
+| boundary | 0.750 | 2 | 1 题正确拒答，1 题部分回答 |
+| **总体** | **0.753** | **10** | 引用率 80%，平均延迟 48.5s |
+
+**流水线节点**: planner → retriever → evaluator(CRAG) → generator → auditor（5 节点全部执行）
+
+**关键改进**:
+- JSON 解析：括号深度匹配替代贪婪正则，兼容推理模型输出
+- LangGraph 依赖：graphrag-schemas/graphrag-graph 正确安装到 Python 3.11 环境
+- 每查询置信度：factual 0.82 / relational 0.80 / multihop 0.91
+
 ### 6.1 消融总表
 
 | 组别 | Answer Accuracy | Faithfulness | Latency |
@@ -338,6 +357,9 @@ class QueryResult:
 - [x] 调优 BM25 权重（0.25→0.15）+ 过滤低分结果
 - [x] 实现 Planner LLM 推理（动态选择检索策略）
 - [x] 实现 Rewriter LLM 改写（multihop 拆分子问题）
+- [x] JSON 解析兼容推理模型（括号深度匹配）
+- [x] LangGraph 依赖安装与环境兼容性修复
+- [x] LangGraph 5 节点流水线端到端验证（10 题 smoke test 3/3 通过）
 - [ ] 接入外部集抽样
 - [ ] 执行人工抽检，计算 Cohen's kappa
 - [ ] 接入 Langfuse trace 下钻

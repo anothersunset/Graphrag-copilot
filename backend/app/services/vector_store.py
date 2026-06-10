@@ -117,12 +117,15 @@ class EmbeddingService:
 
     def _init_model(self):
         try:
+            import os
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
             from sentence_transformers import SentenceTransformer
             self.model = SentenceTransformer(
                 settings.EMBEDDING_MODEL,
                 device=settings.EMBEDDING_DEVICE,
             )
             self.use_tfidf = False
+            logger.info("Embedding 模型加载成功: {}", settings.EMBEDDING_MODEL)
         except Exception:
             logger.exception("Embedding 模型加载失败，使用 hash 备选")
             self.model = None

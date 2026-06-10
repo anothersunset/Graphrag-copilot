@@ -29,6 +29,22 @@ PLANNER_PROMPT = (
 )
 
 
+def _extract_balanced_json(text: str) -> str | None:
+    """用括号深度匹配提取第一个完整的 {...} JSON 块."""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
 def _call_llm(llm: Any, question: str) -> dict:
     """调用 LLM 分析问题类型。"""
     try:
@@ -36,16 +52,28 @@ def _call_llm(llm: Any, question: str) -> dict:
             model="",
             system=PLANNER_PROMPT,
             user=f"问题：{question}",
-            timeout_s=10.0,
+            timeout_s=15.0,
         )
-        # 解析 JSON
+        # 从 LLM 输出中提取 JSON（处理推理模型返回的额外文本）
         clean = result.strip()
-        if clean.startswith("```"):
-            clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
-            if clean.endswith("```"):
-                clean = clean[:-3]
-            clean = clean.strip()
-        return json.loads(clean)
+        # 尝试代码块
+        if "```json" in clean:
+            clean = clean.split("```json", 1)[1].split("```", 1)[0].strip()
+        elif "```" in clean:
+            parts = clean.split("```")
+            if len(parts) >= 3:
+                clean = parts[1].strip()
+        # 尝试直接解析
+        try:
+            return json.loads(clean)
+        except Exception:
+            pass
+        # 用括号深度匹配提取
+        balanced = _extract_balanced_json(result)
+        if balanced:
+            return json.loads(balanced)
+        logger.warning("planner: JSON 解析失败, raw=%s", result[:200])
+        return {}
     except Exception as e:
         logger.warning("planner LLM failed: %s", e)
         return {}

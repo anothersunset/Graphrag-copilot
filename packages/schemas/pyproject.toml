@@ -2,7 +2,7 @@
 name = "graphrag-schemas"
 version = "0.1.0"
 description = "Pydantic schemas — the type hub for graphrag-copilot"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = ["pydantic>=2.9"]
 
 [build-system]

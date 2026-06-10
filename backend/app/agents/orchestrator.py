@@ -74,9 +74,10 @@ class LangGraphOrchestrator:
         self._graph = build_graph(
             config=GraphConfig(
                 enable_kg=True,
-                max_rewrites=2,
-                max_hits=20,
-                top_k_after_rerank=5,
+                max_rewrites=1,
+                max_hits=10,
+                top_k_after_rerank=3,
+                llm_timeout_s=30.0,
             ),
             retrievers=build_retrievers(),
             llm_client=LLMAdapter(),
@@ -230,6 +231,22 @@ class ReasoningAgent:
         ]
 
         result = _get_llm_service().chat_json(messages)
+        # 如果 JSON 解析失败（推理模型可能返回非 JSON 文本），从原始文本提取答案
+        if "answer" not in result:
+            raw = result.get("raw_response", "")
+            logger.warning("ReasoningAgent: JSON 解析失败, raw=%s", str(raw)[:300])
+            # 尝试从原始响应中提取答案（跳过推理部分，取最后一个段落）
+            if raw:
+                # 去掉可能的推理文本，尝试找 JSON
+                import re
+                json_match = re.search(r'"answer"\s*:\s*"([^"]*)"', raw)
+                if json_match:
+                    result["answer"] = json_match.group(1)
+                else:
+                    # 取最后一个非空段落作为答案
+                    paragraphs = [p.strip() for p in raw.split("\n") if p.strip() and not p.strip().startswith("{")]
+                    if paragraphs:
+                        result["answer"] = paragraphs[-1][:2000]
         return {
             "answer": result.get("answer", "当前信息不足，无法回答。"),
             "reasoning_path": result.get("reasoning_path", []),
