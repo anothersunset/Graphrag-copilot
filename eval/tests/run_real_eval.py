@@ -96,23 +96,33 @@ def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
     start_time = time.time()
 
     for i, case in enumerate(cases):
-        try:
-            result = run_query(case.question, {"vector": True, "bm25": True, "graph": True}, base_url=base_url)
-            point_coverage = check_answer(result.answer, case)
-            metrics = compute_metrics(case, result, point_coverage=point_coverage)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = run_query(case.question, {"vector": True, "bm25": True, "graph": True}, base_url=base_url)
+                point_coverage = check_answer(result.answer, case)
+                metrics = compute_metrics(case, result, point_coverage=point_coverage)
 
-            status = "OK" if point_coverage > 0 else "MISS"
-            log.info("[%d/%d] %s %s (%s): acc=%.2f faith=%.2f lat=%.1fs tc=%.2f ac=%.2f",
-                     i+1, len(cases), status, case.id, case.type,
-                     point_coverage, metrics.get("faithfulness", 0),
-                     result.latency, metrics.get("trace_completeness", 0),
-                     metrics.get("audit_coverage", 0))
+                status = "OK" if point_coverage > 0 else "MISS"
+                log.info("[%d/%d] %s %s (%s): acc=%.2f faith=%.2f lat=%.1fs tc=%.2f ac=%.2f",
+                         i+1, len(cases), status, case.id, case.type,
+                         point_coverage, metrics.get("faithfulness", 0),
+                         result.latency, metrics.get("trace_completeness", 0),
+                         metrics.get("audit_coverage", 0))
 
-            results.append(metrics)
+                results.append(metrics)
+                break  # 成功，跳出重试循环
 
-        except Exception as e:
-            errors += 1
-            log.error("[%d/%d] ERR %s: %s", i+1, len(cases), case.id, str(e)[:100])
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait = 10 * (attempt + 1)
+                    log.warning("[%d/%d] %s attempt %d failed, retrying in %ds: %s",
+                                i+1, len(cases), case.id, attempt+1, wait, str(e)[:80])
+                    time.sleep(wait)
+                else:
+                    errors += 1
+                    log.error("[%d/%d] ERR %s (after %d attempts): %s",
+                              i+1, len(cases), case.id, max_retries, str(e)[:100])
 
     elapsed = time.time() - start_time
 
