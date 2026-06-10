@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from .._utils import digest, now_iso
@@ -13,18 +14,36 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "你是 GraphRAG Copilot，一个严谨的知识问答助手。\n\n"
-    "**核心规则（必须严格遵守）：**\n"
-    "1. **只基于证据回答**：每个事实声明必须有 [chunk:N] 引用，N 是 1-based 索引\n"
-    "2. **禁止编造**：如果证据中没有相关信息，必须明确说「根据现有信息无法回答」\n"
-    "3. **禁止推断**：不要从证据中推导出未明确陈述的结论\n"
-    "4. **多跳问题分步推理**：对于需要综合多个证据的问题，先列出每个证据的关键信息，再综合得出结论\n"
-    "5. **引用格式**：每个关键结论后必须标注 [chunk:N]，如「系统使用 FAISS [chunk:1] 和 BM25 [chunk:2]」\n"
-    "6. **不确定时拒答**：如果证据质量低或信息不足，直接说「信息不足，无法准确回答」\n\n"
+    "**核心规则（违反任何一条即为失败回答）：**\n"
+    "1. **只基于证据回答**：你的回答中的每一句话、每一个事实，都必须来自下方的「可用证据」\n"
+    "2. **强制引用**：每个事实声明后必须标注 [chunk:N]，N 是证据编号。没有 [chunk:N] 的事实声明被视为编造\n"
+    "3. **禁止编造**：绝对不允许输出证据中不存在的信息。不要用自己的知识补充\n"
+    "4. **禁止推断**：不要从证据中推导出未明确陈述的结论\n"
+    "5. **不确定时拒答**：如果证据中没有直接答案，只输出「根据现有信息无法回答这个问题。」\n"
+    "6. **多跳问题分步推理**：先列出每个证据的关键信息 [chunk:N]，再综合得出结论\n\n"
+    "**输出前自检（必须执行）：**\n"
+    "- 检查回答中的每个事实声明，确保都有 [chunk:N] 标注\n"
+    "- 如果发现无引用的事实，删除该声明或改为拒答\n"
+    "- 宁可少答也不要编造\n\n"
     "**输出格式：**\n"
     "- 直接回答，不要说「根据证据」之类的开场白\n"
-    "- 每个要点单独一行，便于阅读\n"
-    "- 如果无法回答，只输出「根据现有信息无法回答这个问题。」"
+    "- 每个要点单独一行\n"
+    "- 示例：「系统使用 FAISS [chunk:1] 和 BM25 [chunk:2] 进行混合检索。」"
 )
+
+
+REFUSAL_ANSWER = "根据现有信息无法回答这个问题。"
+
+
+def _has_citations(answer: str) -> bool:
+    """检查答案是否包含 [chunk:N] 引用."""
+    return bool(re.search(r"\[chunk:\d+\]", answer))
+
+
+def _is_refusal(answer: str) -> bool:
+    """检查答案是否是拒答."""
+    refusal_markers = ["无法回答", "信息不足", "没有找到", "无法确定", "没有相关信息"]
+    return any(m in answer for m in refusal_markers)
 
 
 def generator_node(state: GraphState, config: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -63,6 +82,14 @@ def generator_node(state: GraphState, config: dict[str, Any] | None = None) -> d
         else:
             # Instructor structured output — expect .answer field
             answer = getattr(result, "answer", str(result))
+
+    # ── 后验检查：答案必须包含 [chunk:N] 引用 ──
+    if not _is_refusal(answer) and not _has_citations(answer):
+        logger.warning(
+            "generator: answer has no [chunk:N] citations, forcing refusal. answer=%s",
+            answer[:200],
+        )
+        answer = REFUSAL_ANSWER
 
     citations: list[Citation] = [
         {

@@ -36,19 +36,19 @@ class CragResult:
 class CragScorer:
     """Pluggable CRAG scorer.
 
-    Thresholds default to the v3.1 spec:
-      * score >= 0.7        → ``use``
-      * 0.3 <= score < 0.7  → ``rewrite``
-      * score < 0.3         → ``fallback``
+    Thresholds (v3.3, tuned after 50-question eval):
+      * score >= 0.5        → ``use``
+      * 0.2 <= score < 0.5  → ``rewrite``
+      * score < 0.2         → ``fallback``
     """
 
     def __init__(
         self,
         *,
         scorer: Scorer | None = None,
-        use_threshold: float = 0.7,
-        rewrite_threshold: float = 0.3,
-        coverage_floor: float = 0.5,
+        use_threshold: float = 0.5,
+        rewrite_threshold: float = 0.2,
+        coverage_floor: float = 0.3,
         alpha: float = 0.7,
         top_k: int = 5,
     ) -> None:
@@ -97,7 +97,16 @@ class CragScorer:
         ]
         coverage = sum(1 for s in effective if s >= self.coverage_floor) / len(effective)
 
-        final = self.alpha * relevance + (1.0 - self.alpha) * coverage
+        # Score spread: slight penalty when all scores are uniformly high.
+        # Uniformly high scores mean the retriever can't discriminate well.
+        if len(effective) >= 2:
+            score_spread = max(effective) - min(effective)
+            spread_factor = min(1.0, score_spread * 2.0)  # spread=0.5 → factor=1.0
+        else:
+            spread_factor = 1.0
+
+        raw_final = self.alpha * relevance + (1.0 - self.alpha) * coverage
+        final = raw_final * (0.85 + 0.15 * spread_factor)  # spread=0 → 0.85x, spread>=0.5 → 1.0x
         final = max(0.0, min(1.0, final))
 
         if final >= self.use_threshold:
@@ -112,5 +121,5 @@ class CragScorer:
             decision=decision,
             relevance=relevance,
             coverage=coverage,
-            detail={"k": len(top), "alpha": self.alpha},
+            detail={"k": len(top), "alpha": self.alpha, "spread_factor": round(spread_factor, 3)},
         )
