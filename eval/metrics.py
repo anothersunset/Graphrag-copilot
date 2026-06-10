@@ -224,7 +224,9 @@ def boundary_refusal_rate(result: QueryResult, case: GoldCase) -> float:
 
 # ─────────────────────────── 第三层：Agentic 链路 ───────────────────────────
 
-EXPECTED_TRACE_NODES = {"planner", "retriever", "evaluator", "reasoner", "verifier", "generator", "auditor"}
+# 主路径必须节点（planner→retriever→evaluator→generator→auditor）
+# rewriter/fallback 是条件触发的异常处理路径，通过 CRAG Repair Rate 单独度量
+EXPECTED_TRACE_NODES = {"planner", "retriever", "evaluator", "generator", "auditor"}
 
 
 def trace_completeness(trace_nodes: List[str]) -> float:
@@ -266,27 +268,27 @@ def crag_repair_rate(crag_decision: str, answer_quality_improved: bool) -> float
     """CRAG Repair Rate: rewrite/fallback 后是否修复答案.
 
     Args:
-        crag_decision: CRAG 决策 (keep/rewrite/fallback)
+        crag_decision: CRAG 决策 (use/rewrite/fallback)
         answer_quality_improved: 答案质量是否提升
 
     Returns:
-        1.0 如果修复成功，0.0 如果未修复，0.5 如果未触发 CRAG
+        1.0 如果修复成功，0.0 如果未修复，0.5 如果未触发 CRAG (use 路径)
     """
-    if crag_decision == "keep":
+    if crag_decision == "use":
         return 0.5  # 未触发 CRAG，给中性分
     return 1.0 if answer_quality_improved else 0.0
 
 
 def verifier_pass_rate(trace_nodes: List[str]) -> float:
-    """Verifier Pass Rate: Verifier 是否正常执行.
+    """Verifier Pass Rate: generator 是否正常执行（LangGraph 中 generator 替代 verifier 角色）.
 
     Args:
         trace_nodes: 实际执行的节点列表
 
     Returns:
-        1.0 如果 verifier 执行，0.0 如果未执行
+        1.0 如果 generator 执行，0.0 如果未执行
     """
-    return 1.0 if "verifier" in trace_nodes else 0.0
+    return 1.0 if "generator" in trace_nodes else 0.0
 
 
 def audit_coverage(trace_nodes: List[str]) -> float:

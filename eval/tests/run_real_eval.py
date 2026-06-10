@@ -11,6 +11,7 @@
 """
 import argparse
 import json
+import logging
 import sys
 import time
 from pathlib import Path
@@ -64,17 +65,31 @@ def smoke_test(base_url: str):
 
 def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
     """运行真实评测."""
-    print("=" * 60)
-    print("GraphRAG Copilot Real Evaluation")
-    print("=" * 60)
+    # 配置日志
+    log_dir = Path("eval/results")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "real_eval.log"
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(log_file, mode="w", encoding="utf-8"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
+    log = logging.getLogger("real_eval")
+
+    log.info("=" * 60)
+    log.info("GraphRAG Copilot Real Evaluation")
+    log.info("=" * 60)
 
     cases = load_benchmark("eval/datasets/benchmark_50.jsonl")
     if max_cases > 0:
         cases = cases[:max_cases]
-    print(f"Loaded {len(cases)} cases")
-    print(f"Base URL: {base_url}")
-    print(f"LLM Judge: {use_llm}")
-    print()
+    log.info("Loaded %d cases", len(cases))
+    log.info("Base URL: %s", base_url)
+    log.info("LLM Judge: %s", use_llm)
 
     results = []
     errors = 0
@@ -87,46 +102,52 @@ def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
             metrics = compute_metrics(case, result, point_coverage=point_coverage)
 
             status = "OK" if point_coverage > 0 else "MISS"
-            print(f"[{i+1}/{len(cases)}] {status} {case.id} ({case.type}): acc={point_coverage:.2f} lat={result.latency:.1f}s")
+            log.info("[%d/%d] %s %s (%s): acc=%.2f faith=%.2f lat=%.1fs tc=%.2f ac=%.2f",
+                     i+1, len(cases), status, case.id, case.type,
+                     point_coverage, metrics.get("faithfulness", 0),
+                     result.latency, metrics.get("trace_completeness", 0),
+                     metrics.get("audit_coverage", 0))
 
             results.append(metrics)
 
         except Exception as e:
             errors += 1
-            print(f"[{i+1}/{len(cases)}] ERR {case.id}: {str(e)[:60]}")
+            log.error("[%d/%d] ERR %s: %s", i+1, len(cases), case.id, str(e)[:100])
 
     elapsed = time.time() - start_time
 
     # 汇总
-    print()
-    print("=" * 60)
-    print(f"Completed: {len(results)} | Errors: {errors} | Time: {elapsed:.0f}s")
-    print("=" * 60)
+    log.info("=" * 60)
+    log.info("Completed: %d | Errors: %d | Time: %.0fs", len(results), errors, elapsed)
+    log.info("=" * 60)
 
     if not results:
-        print("No results to summarize.")
+        log.warning("No results to summarize.")
         return
 
     # 按组汇总
-    print(f"\n{'Metric':<25} {'Value':<10}")
-    print("-" * 35)
+    log.info("%-25s %-10s", "Metric", "Value")
+    log.info("-" * 35)
 
-    for metric_key in ["answer_accuracy", "faithfulness", "hallucination_rate", "boundary_refusal_rate"]:
+    for metric_key in ["answer_accuracy", "faithfulness", "hallucination_rate",
+                        "boundary_refusal_rate", "trace_completeness", "audit_coverage",
+                        "verifier_pass_rate", "recall_at_5", "citation_recall"]:
         values = [r[metric_key] for r in results if metric_key in r]
         if values:
             avg = sum(values) / len(values)
-            print(f"{metric_key:<25} {avg:<10.4f}")
+            log.info("%-25s %.4f", metric_key, avg)
 
     # 按类型拆分
-    print(f"\n{'Type':<12} {'Accuracy':<12} {'Faithfulness':<15} {'Count':<8}")
-    print("-" * 50)
+    log.info("")
+    log.info("%-12s %-12s %-15s %-8s", "Type", "Accuracy", "Faithfulness", "Count")
+    log.info("-" * 50)
 
     for qtype in ["factual", "relational", "multihop", "crossdoc", "boundary"]:
         type_results = [r for r in results if r.get("case_type") == qtype]
         if type_results:
             avg_acc = sum(r["answer_accuracy"] for r in type_results) / len(type_results)
             avg_faith = sum(r["faithfulness"] for r in type_results) / len(type_results)
-            print(f"{qtype:<12} {avg_acc:<12.4f} {avg_faith:<15.4f} {len(type_results):<8}")
+            log.info("%-12s %-12.4f %-15.4f %-8d", qtype, avg_acc, avg_faith, len(type_results))
 
     # 保存结果
     out_file = Path("eval/results/real_eval_results.json")
@@ -139,7 +160,8 @@ def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
             "elapsed": elapsed,
             "results": results,
         }, f, ensure_ascii=False, indent=2, default=str)
-    print(f"\nResults saved to: {out_file}")
+    log.info("Results saved to: %s", out_file)
+    log.info("Log saved to: %s", log_file)
 
 
 def main():

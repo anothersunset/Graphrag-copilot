@@ -90,19 +90,29 @@ def run_query(question: str, config: Dict[str, Any], base_url: str = DEFAULT_BAS
     latency = time.time() - start_time
     data = resp.json()
 
-    # 解析 trace 节点
+    # 解析 trace 节点（兼容 LangGraph 和 Legacy 两种格式）
     trace = data.get("trace", {})
     trace_nodes = []
-    for node_key in ("analysis", "retrieval", "reasoning", "verification"):
-        if node_key in trace:
-            trace_nodes.append(node_key)
 
-    # 解析 CRAG 决策
-    crag_decision = "keep"
-    if trace.get("reasoning", {}).get("limitations"):
-        crag_decision = "fallback"
-    if trace.get("analysis", {}).get("query_rewrite") != question:
-        crag_decision = "rewrite"
+    # LangGraph 格式: trace.nodes = ["planner", "retriever", ...]
+    if "nodes" in trace and isinstance(trace["nodes"], list):
+        trace_nodes = trace["nodes"]
+    else:
+        # Legacy 格式: trace.analysis / trace.retrieval / trace.reasoning / trace.verification
+        for node_key in ("analysis", "retrieval", "reasoning", "verification"):
+            if node_key in trace:
+                trace_nodes.append(node_key)
+
+    # 解析 CRAG 决策（优先从 API 响应直接读取）
+    crag_decision = data.get("crag_decision", "")
+    if not crag_decision or crag_decision == "unknown":
+        # 回退: 从 trace 推断
+        if trace.get("reasoning", {}).get("limitations"):
+            crag_decision = "fallback"
+        elif trace.get("analysis", {}).get("query_rewrite") != question:
+            crag_decision = "rewrite"
+        else:
+            crag_decision = "use"
 
     # 解析 sources 为 contexts 和 citations
     sources = data.get("sources", [])
