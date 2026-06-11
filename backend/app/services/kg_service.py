@@ -3,7 +3,6 @@
 以避免源码工具或文本编辑器对花括号的转义/折叠。"""
 from typing import List, Dict, Any
 from collections import defaultdict
-from neo4j import GraphDatabase
 from config.settings import settings
 from app.core.logger import logger
 from app.core.constants import (
@@ -12,6 +11,15 @@ from app.core.constants import (
     DEFAULT_ENTITY_TYPE,
     DEFAULT_RELATION_TYPE,
 )
+
+# 延迟导入 neo4j，避免未安装时 ModuleNotFoundError
+try:
+    from neo4j import GraphDatabase
+    _NEO4J_AVAILABLE = True
+except ImportError:
+    GraphDatabase = None  # type: ignore
+    _NEO4J_AVAILABLE = False
+    logger.warning("neo4j 未安装，图谱功能不可用")
 
 _LB = chr(123)  # '{'
 _RB = chr(125)  # '}'
@@ -28,6 +36,10 @@ class KnowledgeGraphService:
         self._connect()
 
     def _connect(self):
+        if not _NEO4J_AVAILABLE:
+            logger.warning("neo4j 未安装，图谱功能不可用")
+            self.driver = None
+            return
         try:
             self.driver = GraphDatabase.driver(
                 settings.NEO4J_URI,

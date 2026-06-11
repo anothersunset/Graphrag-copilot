@@ -9,14 +9,14 @@ from dataclasses import dataclass, field
 class CragThresholds:
     """CRAG decision thresholds.
 
-    Locked v3.1 values:
-      * score >= 0.7              → ``use`` (forward to generator)
-      * 0.3 <= score < 0.7        → ``rewrite`` (loop back through retriever)
-      * score < 0.3               → ``fallback`` (low-confidence response)
+    v3.3 values (tuned after 50-question eval):
+      * score >= 0.5              → ``use`` (forward to generator)
+      * 0.2 <= score < 0.5        → ``rewrite`` (loop back through retriever)
+      * score < 0.2               → ``fallback`` (low-confidence response)
     """
 
-    use: float = 0.7
-    rewrite_low: float = 0.3
+    use: float = 0.5
+    rewrite_low: float = 0.2
 
     def decide(self, score: float) -> str:
         if score >= self.use:
@@ -42,4 +42,4 @@ class GraphConfig:
     planner_model: str = "openai/gpt-4o-mini"
     generator_model: str = "openai/gpt-4o-mini"
     auditor_model: str = "openai/gpt-4o-mini"
-    llm_timeout_s: float = 30.0
+    llm_timeout_s: float = 20.0

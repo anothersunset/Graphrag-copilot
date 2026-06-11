@@ -81,7 +81,7 @@ def run_query(question: str, config: Dict[str, Any], base_url: str = DEFAULT_BAS
         resp = requests.post(
             f"{base_url}/api/query",
             json=payload,
-            timeout=config.get("timeout", 120),
+            timeout=config.get("timeout", 180),
         )
         resp.raise_for_status()
     except requests.RequestException as e:

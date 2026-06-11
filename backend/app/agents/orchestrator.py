@@ -48,13 +48,18 @@ class LLMAdapter:
         llm.complete(model=..., system=..., user=..., timeout_s=...)
     """
 
-    def complete(self, *, model: str = "", system: str = "", user: str = "", timeout_s: float = 30.0) -> str:
+    def complete(self, *, model: str = "", system: str = "", user: str = "", timeout_s: float = 20.0) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         if user:
             messages.append({"role": "user", "content": user})
-        return _get_llm_service().chat(messages)
+        # planner 短 prompt 用更少 max_tokens
+        max_tokens = 300 if len(user) < 200 else None
+        kwargs = {}
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+        return _get_llm_service().chat(messages, **kwargs)
 
 
 # ─────────────────── LangGraph 编排器 ───────────────────
@@ -75,9 +80,9 @@ class LangGraphOrchestrator:
             config=GraphConfig(
                 enable_kg=True,
                 max_rewrites=1,
-                max_hits=10,
-                top_k_after_rerank=3,
-                llm_timeout_s=30.0,
+                max_hits=20,
+                top_k_after_rerank=5,
+                llm_timeout_s=20.0,
             ),
             retrievers=build_retrievers(),
             llm_client=LLMAdapter(),
@@ -87,7 +92,21 @@ class LangGraphOrchestrator:
         from graphrag_graph.state import initial_state
 
         state = initial_state(query)
-        result = self._graph.invoke(state)
+        try:
+            result = self._graph.invoke(state)
+        except Exception as e:
+            logger.exception("LangGraph pipeline failed")
+            # 返回拒答而非崩溃
+            return {
+                "query": query,
+                "answer": "根据现有信息无法回答这个问题。",
+                "sources": [],
+                "citations": [],
+                "confidence": 0.0,
+                "crag_decision": "fallback",
+                "auditor_verdict": "fail",
+                "trace": {"nodes": ["planner", "retriever", "evaluator"], "audit": [], "tool_calls": [], "rewrite_iteration": 0},
+            }
         return self._format_response(query, result)
 
     def _format_response(self, query: str, state: dict) -> Dict[str, Any]:

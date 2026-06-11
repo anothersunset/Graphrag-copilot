@@ -133,9 +133,10 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
 
 @router.post("/query", response_model=QueryResponse, dependencies=[Depends(require_api_key)])
 async def query_knowledge(request: QueryRequest):
+    import asyncio
     from app.agents.orchestrator import orchestrator
     try:
-        result = orchestrator.process_query(request.query, top_k=request.top_k)
+        result = await asyncio.to_thread(orchestrator.process_query, request.query, request.top_k)
         return QueryResponse(
             query=result["query"],
             answer=result["answer"],

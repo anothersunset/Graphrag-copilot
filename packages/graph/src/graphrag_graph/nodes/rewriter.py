@@ -37,7 +37,7 @@ def _call_llm(llm: Any, question: str, prior_rewrites: list[str]) -> str | None:
             model="",
             system=REWRITER_PROMPT,
             user=f"原始问题：{question}{context}\n\n请改写查询：",
-            timeout_s=15.0,
+            timeout_s=10.0,
         )
         return result.strip()
     except Exception as e:

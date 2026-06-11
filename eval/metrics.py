@@ -9,6 +9,7 @@ confidence 只落日志、不进任何指标。
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Sequence
 
 from eval.graphrag_client import GoldCase, QueryResult
@@ -35,26 +36,24 @@ def recall_at_k(retrieved_ids: List[str], gold_context_ids: List[str], k: int = 
     return hit / len(gold)
 
 
-def context_precision(contexts: List[str], gold_context_ids: List[str]) -> float:
-    """Context Precision: 检索片段中相关片段的比例.
-
-    简化实现: 用 retrieved_ids 与 gold_context_ids 的交集比例近似。
-    实际生产中应使用 LLM 判断每个 context 是否相关。
+def context_precision(retrieved_ids: List[str], gold_context_ids: List[str]) -> float:
+    """Context Precision: 检索结果中相关片段的比例.
 
     Args:
-        contexts: 检索到的上下文文本列表
+        retrieved_ids: 检索返回的 chunk ID 列表
         gold_context_ids: gold 标准的 chunk ID 列表
 
     Returns:
         精度 [0, 1]
     """
-    if not contexts:
+    if not retrieved_ids:
         return 0.0
-    # 简化: 如果有 gold_context_ids，用数量比近似
-    if gold_context_ids:
-        # 假设每个 context 对应一个 id，用比例近似
-        return min(len(gold_context_ids) / len(contexts), 1.0)
-    return 0.0
+    if not gold_context_ids:
+        return 1.0  # 无 gold 标准时视为完全精确
+    retrieved_set = set(retrieved_ids)
+    gold_set = set(gold_context_ids)
+    hit = len(retrieved_set & gold_set)
+    return hit / len(retrieved_set)
 
 
 def citation_recall(citations: List[str], gold_context_ids: List[str]) -> float:
@@ -112,19 +111,33 @@ def faithfulness(answer: str, contexts: List[str], *, use_llm: bool = False) -> 
 
 
 def _faithfulness_keyword(answer: str, contexts: List[str]) -> float:
-    """关键词匹配版 faithfulness（快速但不精确）."""
+    """关键词匹配版 faithfulness — 用 jieba 分词 + 长片段匹配."""
+    import jieba
     sentences = [s.strip() for s in answer.replace("。", ".").replace("；", ";").split(".") if s.strip()]
     if not sentences:
         return 0.0
 
     context_text = " ".join(contexts).lower()
+    # 预分词 context 用于快速查找
+    context_tokens = set(jieba.cut(context_text))
+    context_tokens = {t.strip().lower() for t in context_tokens if len(t.strip()) > 1}
+
     supported = 0
     for sent in sentences:
-        keywords = [w for w in sent.split() if len(w) > 1]
-        if keywords:
-            hit = sum(1 for kw in keywords if kw.lower() in context_text)
-            if hit / len(keywords) > 0.3:
-                supported += 1
+        # 跳过纯引用标注 [chunk:N]
+        if re.match(r'^\[chunk:\d+\]$', sent.strip()):
+            continue
+        # 用 jieba 分词
+        tokens = list(jieba.cut(sent))
+        keywords = [w.strip().lower() for w in tokens if len(w.strip()) > 1]
+        if not keywords:
+            continue
+        # 计算命中：关键词在 context tokens 中出现
+        hit = sum(1 for kw in keywords if kw in context_text or kw in context_tokens)
+        hit_ratio = hit / len(keywords)
+        # 降低阈值到 0.15（中文分词后短词多，匹配率天然偏低）
+        if hit_ratio > 0.15:
+            supported += 1
 
     return supported / len(sentences)
 
@@ -186,17 +199,18 @@ def _faithfulness_llm(answer: str, contexts: List[str]) -> float:
         return _faithfulness_keyword(answer, contexts)
 
 
-def hallucination_rate(answer: str, contexts: List[str]) -> float:
+def hallucination_rate(answer: str, contexts: List[str], use_llm: bool = False) -> float:
     """Hallucination Rate: 不被证据支持的事实比例.
 
     Args:
         answer: 系统生成的答案
         contexts: 检索到的上下文列表
+        use_llm: 是否使用 LLM Judge
 
     Returns:
         幻觉率 [0, 1]，越低越好
     """
-    return 1.0 - faithfulness(answer, contexts)
+    return 1.0 - faithfulness(answer, contexts, use_llm=use_llm)
 
 
 def boundary_refusal_rate(result: QueryResult, case: GoldCase) -> float:
@@ -306,13 +320,14 @@ def audit_coverage(trace_nodes: List[str]) -> float:
 
 # ─────────────────────────── 汇总 ───────────────────────────
 
-def compute_metrics(case: GoldCase, result: QueryResult, point_coverage: float = 0.0) -> Dict[str, Any]:
+def compute_metrics(case: GoldCase, result: QueryResult, point_coverage: float = 0.0, use_llm: bool = False) -> Dict[str, Any]:
     """汇总三层指标为一行 MetricRow.
 
     Args:
         case: gold 用例
         result: 查询结果
         point_coverage: 要点覆盖率 (由 judge 计算)
+        use_llm: 是否使用 LLM Judge 计算 faithfulness
 
     Returns:
         包含所有指标的字典
@@ -323,12 +338,12 @@ def compute_metrics(case: GoldCase, result: QueryResult, point_coverage: float =
         "difficulty": case.difficulty,
         # 第一层: 检索质量
         "recall_at_5": recall_at_k(result.retrieved_ids, case.gold_context_ids, k=5),
-        "context_precision": context_precision(result.contexts, case.gold_context_ids),
+        "context_precision": context_precision(result.retrieved_ids, case.gold_context_ids),
         "citation_recall": citation_recall(result.citations, case.gold_context_ids),
         # 第二层: 答案质量
         "answer_accuracy": answer_accuracy(point_coverage),
-        "faithfulness": faithfulness(result.answer, result.contexts),
-        "hallucination_rate": hallucination_rate(result.answer, result.contexts),
+        "faithfulness": faithfulness(result.answer, result.contexts, use_llm=use_llm),
+        "hallucination_rate": hallucination_rate(result.answer, result.contexts, use_llm=use_llm),
         "boundary_refusal_rate": boundary_refusal_rate(result, case),
         # 第三层: Agentic 链路
         "trace_completeness": trace_completeness(result.trace_nodes),

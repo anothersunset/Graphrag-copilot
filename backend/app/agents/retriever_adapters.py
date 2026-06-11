@@ -52,24 +52,44 @@ class BM25Retriever:
 
 
 class KGRetriever:
-    """Neo4j 知识图谱检索适配器."""
+    """Neo4j 知识图谱检索适配器.
+
+    v3.3: 添加 5s 超时和快速跳过机制（Neo4j 不可用时自动禁用）。
+    """
+
+    def __init__(self):
+        self._disabled = False  # 连续失败后禁用
 
     def retrieve(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
-        from app.services.kg_service import kg_service
+        if self._disabled:
+            return []
+
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
         entities = self._extract_entities(query)
         if not entities:
             return []
 
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(self._do_search, entities, query, top_k)
+                return future.result(timeout=5.0)  # 5s 硬超时
+        except (FuturesTimeout, Exception) as e:
+            import logging
+            logging.getLogger(__name__).warning("KG retriever failed/timeout: %s — disabling KG", e)
+            self._disabled = True
+            return []
+
+    def _do_search(self, entities: List[str], query: str, top_k: int) -> List[Dict[str, Any]]:
+        from app.services.kg_service import kg_service
+
         graph_results = kg_service.graph_rag_search(entities, query, depth=2)
         hits = []
-
         for ctx in graph_results.get("related_contexts", [])[:top_k]:
             name = ctx.get("name", "")
             entity_type = ctx.get("type", "Entity")
             distance = ctx.get("distance", 1)
             score = 0.7 / max(float(distance or 1), 1.0)
-
             hits.append({
                 "chunk_id": f"kg-{name}",
                 "source": "kg",
@@ -77,7 +97,6 @@ class KGRetriever:
                 "content": f"实体: {name}; 类型: {entity_type}; 图谱距离: {distance}",
                 "metadata": ctx,
             })
-
         return hits
 
     def _extract_entities(self, query: str) -> List[str]:

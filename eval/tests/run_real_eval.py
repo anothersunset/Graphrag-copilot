@@ -118,7 +118,7 @@ def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
             try:
                 result = run_query(case.question, {"vector": True, "bm25": True, "graph": True}, base_url=base_url)
                 point_coverage = check_answer(result.answer, case)
-                metrics = compute_metrics(case, result, point_coverage=point_coverage)
+                metrics = compute_metrics(case, result, point_coverage=point_coverage, use_llm=use_llm)
 
                 status = "OK" if point_coverage > 0 else "MISS"
                 log.info("[%d/%d] %s %s (%s): acc=%.2f faith=%.2f lat=%.1fs tc=%.2f ac=%.2f",

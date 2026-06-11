@@ -47,8 +47,14 @@ class LLMService:
                     temperature=kwargs.get("temperature", self.temperature),
                     max_tokens=kwargs.get("max_tokens", self.max_tokens),
                 )
-                return response.choices[0].message.content or ""
-            except (RateLimitError, APIConnectionError) as e:
+                content = response.choices[0].message.content or ""
+                if not content.strip():
+                    logger.warning("LLM 返回空内容，重试 ({}/{})", attempt+1, max_retries)
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt * 3)
+                        continue
+                return content
+            except (RateLimitError, APIConnectionError, ConnectionError, ConnectionResetError) as e:
                 if attempt < max_retries - 1:
                     wait = 2 ** attempt * 5  # 5s, 10s, 20s
                     logger.warning("LLM 限流/连接错误，{}s 后重试 ({}/{}): {}", wait, attempt+1, max_retries, e)

@@ -1,0 +1,90 @@
+{
+  "timestamp": "2026-06-10 15:30:56",
+  "results": [
+    {
+      "case_id": "kb-factual-001",
+      "type": "factual",
+      "accuracy": 1.0,
+      "has_citation": true,
+      "latency": 45.442389488220215,
+      "answer_len": 139
+    },
+    {
+      "case_id": "kb-factual-007",
+      "type": "factual",
+      "accuracy": 0.0,
+      "has_citation": false,
+      "latency": 50.36667490005493,
+      "answer_len": 0
+    },
+    {
+      "case_id": "kb-factual-004",
+      "type": "factual",
+      "accuracy": 1.0,
+      "has_citation": true,
+      "latency": 45.6856803894043,
+      "answer_len": 94
+    },
+    {
+      "case_id": "kb-relational-001",
+      "type": "relational",
+      "accuracy": 1.0,
+      "has_citation": true,
+      "latency": 42.81242513656616,
+      "answer_len": 604
+    },
+    {
+      "case_id": "kb-relational-003",
+      "type": "relational",
+      "accuracy": 1.0,
+      "has_citation": true,
+      "latency": 40.13942861557007,
+      "answer_len": 160
+    },
+    {
+      "case_id": "kb-multihop-001",
+      "type": "multihop",
+      "accuracy": 0.7142857142857143,
+      "has_citation": true,
+      "latency": 58.54063439369202,
+      "answer_len": 549
+    },
+    {
+      "case_id": "kb-multihop-004",
+      "type": "multihop",
+      "accuracy": 0.4444444444444444,
+      "has_citation": true,
+      "latency": 50.41114640235901,
+      "answer_len": 171
+    },
+    {
+      "case_id": "kb-multihop-011",
+      "type": "multihop",
+      "accuracy": 0.875,
+      "has_citation": true,
+      "latency": 55.490506172180176,
+      "answer_len": 542
+    },
+    {
+      "case_id": "kb-boundary-001",
+      "type": "boundary",
+      "accuracy": 0.5,
+      "has_citation": true,
+      "latency": 44.744672536849976,
+      "answer_len": 106
+    },
+    {
+      "case_id": "kb-boundary-002",
+      "type": "boundary",
+      "accuracy": 1.0,
+      "has_citation": false,
+      "latency": 51.81457281112671,
+      "answer_len": 15
+    }
+  ],
+  "summary": {
+    "avg_accuracy": 0.7533730158730159,
+    "citation_rate": 0.8,
+    "avg_latency": 48.54481308460235
+  }
+}

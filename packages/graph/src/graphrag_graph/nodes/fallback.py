@@ -14,9 +14,8 @@ def fallback_node(state: GraphState, config: dict[str, Any] | None = None) -> di
     n_hits = len(state.get("fused_hits", []))
 
     msg = (
-        "I don't have enough confident evidence to answer this question. "
-        f"(crag_score={score:.2f}, evidence_hits={n_hits}). "
-        "Please rephrase or supply more sources."
+        "根据现有信息无法回答这个问题。"
+        f"(证据置信度={score:.2f}, 证据数量={n_hits})"
     )
 
     audit = {

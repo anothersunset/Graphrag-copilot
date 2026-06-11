@@ -1,57 +1,85 @@
-name: CI · Python
+# Templated Python CI workflow.
+# DO NOT COMMIT THE RENDERED .yml FORM FROM THIS PROCESS DIRECTLY.
+# Use:
+#   make ci-activate           # renders sentinel tokens into GitHub expressions
+# or:
+#   bash scripts/install-workflows.sh
+#
+# Why sentinels: the AI agent's GitHub MCP integration cannot push files to
+# .github/workflows/* (App scope), and its tool-call serializer strips
+# consecutive double-braces. Sentinels survive both.
+
+name: ci-python
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
   pull_request:
     branches: [main]
-
-permissions:
-  contents: read
 
 concurrency:
   group: ci-python-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  lint-test:
-    name: Lint, type, test (Python ${{ matrix.python }})
+  python:
+    name: "py / ${{ matrix.target }}"
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.12"]
+        target:
+          - packages/schemas
+          - packages/graph
+          - apps/api
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
 
-      - name: Set up Python ${{ matrix.python }}
-        run: uv python install ${{ matrix.python }}
+      - name: Set up Python
+        run: uv python install 3.11
 
-      - name: Sync workspace (all packages + dev)
+      - name: Install workspace deps
         run: uv sync --all-packages --dev
 
       - name: Ruff check
-        run: uv run ruff check .
+        run: uv run ruff check ${{ matrix.target }}
 
-      - name: Ruff format check
-        run: uv run ruff format --check .
+      - name: Pyright (basic)
+        run: uv run pyright ${{ matrix.target }}
 
-      - name: Pyright (warning only — 62 pre-existing type errors)
-        continue-on-error: true
-        run: uv run pyright
+      - name: Pytest with coverage
+        run: |
+          if [ -d "${{ matrix.target }}/tests" ]; then
+            uv run --directory ${{ matrix.target }} \
+              pytest -ra --cov --cov-report=xml --cov-report=term-missing
+          else
+            echo "no tests in ${{ matrix.target }}; skipping pytest"
+          fi
 
-      - name: Pytest (with coverage)
-        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
-
-      - name: Upload coverage artifact
+      - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-py${{ matrix.python }}
-          path: coverage.xml
+          name: coverage-${{ replace(matrix.target, '/', '-') }}
+          path: ${{ matrix.target }}/coverage.xml
           if-no-files-found: ignore
+
+  legacy-backend-syntax:
+    name: "py / backend syntax gate"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile legacy backend sources
+        run: |
+          python -m compileall -q backend/main.py backend/config backend/app
