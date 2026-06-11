@@ -83,13 +83,19 @@ def generator_node(state: GraphState, config: dict[str, Any] | None = None) -> d
             # Instructor structured output — expect .answer field
             answer = getattr(result, "answer", str(result))
 
-    # ── 后验检查：答案必须包含 [chunk:N] 引用 ──
+    # ── 后验检查：短答案无引用时强制拒答，长答案仅警告 ──
     if not _is_refusal(answer) and not _has_citations(answer):
-        logger.warning(
-            "generator: answer has no [chunk:N] citations, forcing refusal. answer=%s",
-            answer[:200],
-        )
-        answer = REFUSAL_ANSWER
+        if len(answer) < 50:
+            logger.warning(
+                "generator: short answer without citations, forcing refusal. answer=%s",
+                answer[:200],
+            )
+            answer = REFUSAL_ANSWER
+        else:
+            logger.warning(
+                "generator: answer has no [chunk:N] citations (kept). answer=%s",
+                answer[:200],
+            )
 
     citations: list[Citation] = [
         {
