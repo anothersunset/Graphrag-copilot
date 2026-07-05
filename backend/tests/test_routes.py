@@ -21,13 +21,16 @@ def mock_all_services():
     mock_settings.MAX_FILE_SIZE = 10 * 1024 * 1024
     mock_settings.APP_NAME = "test"
     mock_settings.APP_VERSION = "0.1"
+    mock_settings.DEBUG = False
     mock_settings.NEO4J_URI = "bolt://localhost"
-    mock_settings.ZHIPU_API_KEY = "test"
-    mock_settings.ZHIPU_BASE_URL = "https://test.com/v1"
     mock_settings.LLM_API_KEY = "test"
     mock_settings.LLM_BASE_URL = "https://test.com/v1"
     mock_settings.LLM_TEMPERATURE = 0.7
     mock_settings.LLM_MAX_TOKENS = 1024
+    mock_settings.ENABLE_AUTH = False
+    mock_settings.API_KEYS = None
+    mock_settings.RATE_LIMIT_PER_MIN = 60
+    mock_settings.CORS_ORIGINS = ["*"]
 
     mock_vector_store = MagicMock()
     mock_vector_store.search.return_value = []

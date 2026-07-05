@@ -19,7 +19,7 @@ Graphrag-copilot/
 │   │   │   ├── document_parser.py     # 多模态文档解析 (PDF/DOCX/PPTX/图片/音视频)
 │   │   │   ├── evidence_fusion.py     # 多路证据融合 & 去重排序
 │   │   │   ├── kg_service.py          # Neo4j 知识图谱服务 (CRUD / 邻居查询 / 路径查找)
-│   │   │   ├── llm_service.py         # LLM 调用封装 (智谱 GLM-4-Flash / OpenAI 兼容)
+│   │   │   ├── llm_service.py         # LLM 调用封装 (DeepSeek / OpenAI 兼容)
 │   │   │   └── vector_store.py        # FAISS 向量存储 + SentenceTransformer Embedding
 │   │   └── utils/
 │   │       └── json_utils.py          # LLM JSON 回复容错解析
@@ -80,7 +80,7 @@ Graphrag-copilot/
 
 | 层级 | 技术 | 版本 | 用途 |
 |------|------|------|------|
-| **LLM** | 智谱 GLM-4-Flash | — | 对话生成 / 实体抽取 / 答案验证 |
+| **LLM** | DeepSeek | deepseek-chat | 对话生成 / 实体抽取 / 答案验证 |
 | **Embedding** | BAAI/bge-small-zh-v1.5 | dim 512 | 文本向量化 |
 | **向量库** | FAISS | 1.8.0 | IndexFlatIP 内积检索 |
 | **图数据库** | Neo4j | 5.x | 知识图谱存储 / 邻居查询 / 路径查找 |

@@ -29,6 +29,18 @@ def test_orchestrator_returns_trace(monkeypatch):
         },
     )
 
+    monkeypatch.setattr(
+        orchestrator.verification_agent,
+        "verify",
+        lambda query, answer, sources: {
+            "is_supported": True,
+            "hallucination_detected": False,
+            "confidence": 0.85,
+            "issues": [],
+            "source_mapping": {},
+        },
+    )
+
     result = orchestrator.process_query("什么是 GraphRAG？")
 
     assert "trace" in result

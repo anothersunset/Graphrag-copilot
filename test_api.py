@@ -38,21 +38,21 @@ def test_health() -> bool:
 
 def test_system_status() -> bool:
     print("[2] 系统状态")
-    r = requests.get(BASE_URL + "/api/system/status", timeout=5)
+    r = requests.get(BASE_URL + "/api/system/status", headers=_auth_headers(), timeout=5)
     print("   ->", r.status_code)
     return r.status_code == 200
 
 
 def test_vector_stats() -> bool:
     print("[3] 向量库统计")
-    r = requests.get(BASE_URL + "/api/vector/stats", timeout=5)
+    r = requests.get(BASE_URL + "/api/vector/stats", headers=_auth_headers(), timeout=5)
     print("   ->", r.status_code)
     return r.status_code == 200
 
 
 def test_graph_stats() -> bool:
     print("[4] 知识图谱统计")
-    r = requests.get(BASE_URL + "/api/graph/stats", timeout=5)
+    r = requests.get(BASE_URL + "/api/graph/stats", headers=_auth_headers(), timeout=5)
     print("   ->", r.status_code)
     return r.status_code == 200
 

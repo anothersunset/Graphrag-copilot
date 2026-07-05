@@ -3,36 +3,22 @@ from openai import OpenAI
 from config.settings import settings
 from app.utils.json_utils import extract_json_object
 from app.core.logger import logger
-import os
-from dotenv import load_dotenv
-from pathlib import Path
 
-# 确保 .env 被加载（显式指定路径）
-_env_path = Path(__file__).parent.parent.parent / ".env"
-load_dotenv(_env_path)
 
 class LLMService:
     def __init__(self):
-        self.zhipu_key = os.getenv("ZHIPU_API_KEY") or settings.ZHIPU_API_KEY
-        self.zhipu_url = os.getenv("ZHIPU_BASE_URL") or settings.ZHIPU_BASE_URL
+        api_key = settings.LLM_API_KEY
+        if not api_key:
+            logger.warning("LLM_API_KEY 未配置，LLM 调用将不可用；请在 .env 中设置 DeepSeek API Key")
+            api_key = "not-configured"
 
-        if self.zhipu_key:
-            self.client = OpenAI(
-                api_key=self.zhipu_key,
-                base_url=self.zhipu_url,
-                timeout=120.0,
-                max_retries=3,
-            )
-            self.model = "glm-4-flash"
-        else:
-            self.client = OpenAI(
-                api_key=settings.LLM_API_KEY or "dummy",
-                base_url=settings.LLM_BASE_URL or "https://api.openai.com/v1",
-                timeout=120.0,
-                max_retries=3,
-            )
-            self.model = settings.LLM_MODEL
-
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=settings.LLM_BASE_URL,
+            timeout=60.0,
+            max_retries=3,
+        )
+        self.model = settings.LLM_MODEL
         self.temperature = settings.LLM_TEMPERATURE
         self.max_tokens = settings.LLM_MAX_TOKENS
 
@@ -64,8 +50,8 @@ class LLMService:
                 if delta and delta.content:
                     yield delta.content
         except Exception as e:
-            logger.exception("LLM 流式调用失败")
-            yield "\n\n[生成中断: " + str(e) + "]"
+            logger.exception("LLM 流式调用失败: {}", type(e).__name__)
+            yield "\n\n[生成中断，请稍后重试]"
 
     def chat_json(self, messages: List[Dict[str, str]], **kwargs) -> Dict[str, Any]:
         response = self.chat(messages, **kwargs)

@@ -26,7 +26,7 @@
 
 ## 技术栈
 - 后端：Python 3.11+ / FastAPI 0.115 / Uvicorn
-- LLM：智谱 GLM-4-Flash（OpenAI 兼容 SDK）
+- LLM：DeepSeek-Chat（OpenAI 兼容 SDK）
 - 向量库：FAISS (IndexFlatIP)
 - 图数据库：Neo4j 5.x (APOC)
 - 嵌入：BAAI/bge-small-zh-v1.5 (dim 512)
@@ -39,7 +39,7 @@
 
 cd backend
 
-cp .env.example .env   # 填入 ZHIPU_API_KEY
+cp .env.example .env   # 填入 LLM_API_KEY（DeepSeek）
 
 pip install -r requirements.txt
 
