@@ -9,7 +9,7 @@ from .reranker import BGEReranker
 from .vector import VectorRetriever
 from .web import TavilyAdapter, WebRetriever
 
-__version__ = "0.2.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "AsyncRetriever",

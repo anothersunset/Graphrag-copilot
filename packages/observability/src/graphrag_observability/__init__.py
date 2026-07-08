@@ -3,7 +3,7 @@
 from .langfuse_tracer import LangfuseTracer, NoopTracer, get_tracer
 from .spans import AuditExporter, NodeSpan
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "AuditExporter",

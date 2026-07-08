@@ -9,7 +9,7 @@ from .metrics import (
 )
 from .ragas_runner import EvalSample, RagasRunner
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "DeepEvalRunner",
