@@ -89,7 +89,7 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
         doc_result = dp.parse(str(file_path))
     except Exception as e:
         logger.exception("Document parse failed: {}", file.filename)
-        raise HTTPException(status_code=400, detail="Document parse failed: " + str(e))
+        raise HTTPException(status_code=400, detail="Document parse failed")
 
     full_text = doc_result.get("content", {}).get("full_text", "")
     if not full_text:
@@ -117,7 +117,7 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
         _get_bm25_store().add_documents(documents)
     except Exception as e:
         logger.exception("Indexing failed for {}", file.filename)
-        raise HTTPException(status_code=500, detail="Indexing failed: " + str(e))
+        raise HTTPException(status_code=500, detail="Indexing failed")
 
     background_tasks.add_task(_extract_entities_background, file.filename, full_text)
 
@@ -150,7 +150,7 @@ async def query_knowledge(request: QueryRequest):
         )
     except Exception as e:
         logger.exception("Query failed")
-        raise HTTPException(status_code=500, detail="Query failed: " + str(e))
+        raise HTTPException(status_code=500, detail="Query failed")
 
 @router.post("/query/stream", dependencies=[Depends(require_api_key)])
 async def query_knowledge_stream(request: QueryRequest):
@@ -165,7 +165,7 @@ async def query_knowledge_stream(request: QueryRequest):
                 yield f"event: {event_type}\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
         except Exception as e:
             logger.exception("Stream query failed")
-            yield f"event: error\ndata: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+            yield f"event: error\ndata: {json.dumps({'error': 'internal error'}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -177,14 +177,14 @@ async def query_knowledge_stream(request: QueryRequest):
         },
     )
 
-@router.post("/vector/search")
+@router.post("/vector/search", dependencies=[Depends(require_api_key)])
 async def search_vector(request: VectorSearchRequest):
     vs, es = _get_vector_store()
     query_embedding = es.embed_query(request.query)
     results = vs.search(query_embedding, request.top_k)
     return {"query": request.query, "results": results}
 
-@router.get("/graph/stats", response_model=GraphStatsResponse)
+@router.get("/graph/stats", response_model=GraphStatsResponse, dependencies=[Depends(require_api_key)])
 async def get_graph_stats():
     stats = _get_kg_service().get_stats()
     return GraphStatsResponse(
@@ -194,26 +194,26 @@ async def get_graph_stats():
         status=stats.get("status", "unknown"),
     )
 
-@router.get("/graph/entity/{entity_name}")
+@router.get("/graph/entity/{entity_name}", dependencies=[Depends(require_api_key)])
 async def get_entity_neighbors(entity_name: str, depth: int = 2):
     return _get_kg_service().search_neighbors(entity_name, depth)
 
-@router.get("/graph/path")
+@router.get("/graph/path", dependencies=[Depends(require_api_key)])
 async def find_entity_paths(source: str, target: str, max_depth: int = 3):
     paths = _get_kg_service().find_paths(source, target, max_depth)
     return {"source": source, "target": target, "paths": paths}
 
-@router.get("/vector/stats")
+@router.get("/vector/stats", dependencies=[Depends(require_api_key)])
 async def get_vector_stats():
     vs, _ = _get_vector_store()
     return vs.get_stats()
 
-@router.get("/graph")
+@router.get("/graph", dependencies=[Depends(require_api_key)])
 async def get_full_graph(limit: int = 500, type: str = "all"):
     """返回全量图谱数据（节点+关系），供前端力导向图使用"""
     return _get_kg_service().get_all_graph(limit=limit, entity_type=type)
 
-@router.get("/system/status")
+@router.get("/system/status", dependencies=[Depends(require_api_key)])
 async def get_system_status():
     vs, _ = _get_vector_store()
     return {

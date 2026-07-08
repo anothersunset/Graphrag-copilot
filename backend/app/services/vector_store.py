@@ -76,14 +76,14 @@ class VectorStore:
         query_array = np.array([query_embedding], dtype=np.float32)
         faiss.normalize_L2(query_array)
 
-        scores, indices = self.index.search(query_array, min(top_k, self.index.ntotal))
-
-        results = []
-        for score, idx in zip(scores[0], indices[0]):
-            if 0 <= idx < len(self.documents):
-                doc = self.documents[idx].copy()
-                doc["score"] = float(score)
-                results.append(doc)
+        with self._lock:
+            scores, indices = self.index.search(query_array, min(top_k, self.index.ntotal))
+            results = []
+            for score, idx in zip(scores[0], indices[0]):
+                if 0 <= idx < len(self.documents):
+                    doc = self.documents[idx].copy()
+                    doc["score"] = float(score)
+                    results.append(doc)
         return results
 
     def _save(self):

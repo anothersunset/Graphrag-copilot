@@ -11,13 +11,10 @@ class TestLLMService:
     def _create_service(self):
         """Create LLMService with mocked OpenAI client."""
         with patch("app.services.llm_service.OpenAI") as MockOpenAI, \
-             patch("app.services.llm_service.settings") as mock_settings, \
-             patch("app.services.llm_service.os.getenv", return_value="test-key"):
-            mock_settings.ZHIPU_API_KEY = "test-key"
-            mock_settings.ZHIPU_BASE_URL = "https://api.zhipu.ai/v1"
+             patch("app.services.llm_service.settings") as mock_settings:
             mock_settings.LLM_API_KEY = "test-key"
             mock_settings.LLM_BASE_URL = "https://api.openai.com/v1"
-            mock_settings.LLM_MODEL = "gpt-4"
+            mock_settings.LLM_MODEL = "deepseek-chat"
             mock_settings.LLM_TEMPERATURE = 0.7
             mock_settings.LLM_MAX_TOKENS = 1024
 

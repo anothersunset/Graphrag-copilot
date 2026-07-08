@@ -47,7 +47,7 @@ class DocumentParser:
 
     def parse_pdf(self, path: Path) -> Dict[str, Any]:
         try:
-            from pypdf2 import PdfReader
+            from pypdf import PdfReader
             reader = PdfReader(str(path))
             pages = []
             for i, page in enumerate(reader.pages):
@@ -111,12 +111,29 @@ class DocumentParser:
 
     def parse_image(self, path: Path) -> Dict[str, Any]:
         try:
-            from paddleocr import PaddleOCR
-            ocr = PaddleOCR(use_angle_cls=True, lang="ch")
-            result = ocr.ocr(str(path), cls=True)
+            # 模块级缓存 PaddleOCR 实例（首次加载约 30s，避免每次重建）
+            global _ocr_instance
+            if '_ocr_instance' not in globals() or _ocr_instance is None:
+                from paddleocr import PaddleOCR
+                _ocr_instance = PaddleOCR(use_textline_orientation=True, lang="ch")
+            ocr = _ocr_instance
+            result = ocr.predict(str(path))
             texts = []
-            for line in result[0]:
-                texts.append({"text": line[1][0], "confidence": line[1][1], "bbox": line[0]})
+            if result:
+                res = result[0]
+                # PaddleOCR 3.x 返回结构：rec_texts / rec_scores / dt_polys
+                rec_texts = getattr(res, 'rec_texts', [])
+                rec_scores = getattr(res, 'rec_scores', [])
+                dt_polys = getattr(res, 'dt_polys', [])
+                for i, text in enumerate(rec_texts):
+                    bbox = []
+                    if i < len(dt_polys) and hasattr(dt_polys[i], 'tolist'):
+                        bbox = dt_polys[i].tolist()
+                    texts.append({
+                        "text": text,
+                        "confidence": float(rec_scores[i]) if i < len(rec_scores) else 0.0,
+                        "bbox": bbox,
+                    })
             return {
                 "type": "image",
                 "ocr_results": texts,
@@ -156,6 +173,8 @@ class DocumentParser:
     def chunk_text(self, text: str, chunk_size: int = None, overlap: int = None) -> List[str]:
         chunk_size = chunk_size or settings.CHUNK_SIZE
         overlap = overlap or settings.CHUNK_OVERLAP
+        if overlap >= chunk_size:
+            overlap = max(0, chunk_size // 10)
         if len(text) <= chunk_size:
             return [text]
         chunks = []
