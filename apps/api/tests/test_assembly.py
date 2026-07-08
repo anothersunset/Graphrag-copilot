@@ -16,10 +16,21 @@ CORPUS = [
 
 
 class EchoLLM:
-    """Deterministic LLM stub: answers by echoing the evidence it received."""
+    """Deterministic LLM stub shared by the generator AND the rewriter node.
+
+    A real multi-purpose LLM reads the system prompt and behaves
+    differently for "answer this" vs "rewrite this query" — this stub
+    must too, or a CRAG rewrite loop feeds the canned answer text back in
+    as the next query and PPR retrieval finds zero entity matches on it.
+    """
 
     def complete(self, *, model, system, user, timeout_s=30.0):
-        # cite the first evidence chunk so the auditor has something to bind
+        if "改写查询" in system:
+            # rewriter: no-op passthrough keeps CRAG's rewrite loop from
+            # corrupting the query into unrelated text.
+            return user
+        # generator: cite the first evidence chunk so the auditor has
+        # something to bind.
         return "根据证据，答案如下 [chunk:1]。"
 
 

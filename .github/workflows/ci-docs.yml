@@ -1,4 +1,4 @@
-name: CI · Docs
+name: CI Docs
 
 on:
   push:
@@ -30,4 +30,3 @@ jobs:
             !**/node_modules/**
             !backend/**
             !frontend/**
-        continue-on-error: true  # advisory in W1; enforced from W6

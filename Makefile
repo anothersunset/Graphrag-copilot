@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint fmt typecheck clean api web docker-build ci-activate
+.PHONY: help install dev test lint fmt typecheck clean api web docker-build ci-activate smoke
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN {FS=":.*?##"} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -31,6 +31,9 @@ fmt:  ## Format Python (ruff) + frontend (biome)
 typecheck:  ## Run pyright + tsc
 	uv run pyright
 	cd apps/web && pnpm typecheck
+
+smoke:  ## Run API smoke checks against BASE_URL (default http://localhost:8000)
+	python test_api.py
 
 docker-build:  ## Build api + web Docker images
 	docker compose build

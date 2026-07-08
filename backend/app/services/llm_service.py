@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Generator
-from openai import OpenAI
+import time
+from openai import OpenAI, RateLimitError, APIConnectionError
 from config.settings import settings
 from app.utils.json_utils import extract_json_object
 from app.core.logger import logger
@@ -37,17 +38,33 @@ class LLMService:
         self.max_tokens = settings.LLM_MAX_TOKENS
 
     def chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
-        try:
-            response = self.client.chat.completions.create(
-                model=kwargs.get("model", self.model),
-                messages=messages,
-                temperature=kwargs.get("temperature", self.temperature),
-                max_tokens=kwargs.get("max_tokens", self.max_tokens),
-            )
-            return response.choices[0].message.content or ""
-        except Exception:
-            logger.exception("LLM 调用失败")
-            raise
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=kwargs.get("model", self.model),
+                    messages=messages,
+                    temperature=kwargs.get("temperature", self.temperature),
+                    max_tokens=kwargs.get("max_tokens", self.max_tokens),
+                )
+                content = response.choices[0].message.content or ""
+                if not content.strip():
+                    logger.warning("LLM 返回空内容，重试 ({}/{})", attempt+1, max_retries)
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt * 3)
+                        continue
+                return content
+            except (RateLimitError, APIConnectionError, ConnectionError, ConnectionResetError) as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt * 5  # 5s, 10s, 20s
+                    logger.warning("LLM 限流/连接错误，{}s 后重试 ({}/{}): {}", wait, attempt+1, max_retries, e)
+                    time.sleep(wait)
+                else:
+                    logger.exception("LLM 调用失败（重试耗尽）")
+                    raise
+            except Exception:
+                logger.exception("LLM 调用失败")
+                raise
 
     def chat_stream(self, messages: List[Dict[str, str]], **kwargs) -> Generator[str, None, None]:
         """流式调用 LLM，逐 token yield"""

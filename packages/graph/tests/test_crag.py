@@ -20,21 +20,23 @@ def test_high_rerank_scores_route_use():
     hits = [_hit(rerank=0.95) for _ in range(5)]
     r = CragScorer().score("q", hits)
     assert r.decision == "use"
-    assert r.score >= 0.7
+    assert r.score >= 0.5
 
 
 def test_medium_scores_route_rewrite():
-    hits = [_hit(rerank=0.5) for _ in range(5)]
+    # coverage_floor is 0.3 (v3.3 tuning), so pick a rerank value below it
+    # to keep coverage from saturating to 1.0 and pushing the score into use.
+    hits = [_hit(rerank=0.3) for _ in range(5)]
     r = CragScorer().score("q", hits)
     assert r.decision == "rewrite"
-    assert 0.3 <= r.score < 0.7
+    assert 0.2 <= r.score < 0.5
 
 
 def test_low_scores_route_fallback():
     hits = [_hit(rerank=0.05) for _ in range(5)]
     r = CragScorer().score("q", hits)
     assert r.decision == "fallback"
-    assert r.score < 0.3
+    assert r.score < 0.2
 
 
 def test_injected_scorer_overrides_rerank():

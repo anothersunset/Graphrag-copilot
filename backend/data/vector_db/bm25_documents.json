@@ -1,0 +1,602 @@
+[
+  {
+    "content": "# GraphRAG Copilot 系统架构文档\n\n## 1. 技术栈总览\n\n- **后端框架**: FastAPI 0.115 + Uvicorn\n- **前端框架**: Next.js 16 + React 19 + Tailwind CSS 4\n- **向量数据库**: FAISS (IndexFlatIP)\n- **关键词检索**: jieba 分词 + rank-bm25 (BM25Okapi)\n- **图数据库**: Neo4j 5.x + APOC 插件\n- **嵌入模型**: BAAI/bge-small-zh-v1.5，维度 512，运行在 CPU\n- **LLM 模型**: 默认使用智谱 GLM-4-Flash，支持通过环境变量配置其他 OpenAI 兼容模型（如 mimo-v2.5-pro）\n- **OCR 引擎**: PaddleOCR\n- **语音识别**: OpenAI Whisper\n- **日志系统**: loguru，支持 DEBUG/INFO/WARNING/ERROR 级别，通过 LOG_LEVEL 环境变量控制\n\n## 2. 系统分层\n\n系统采用三层架构：展示层、应用",
+    "metadata": {
+      "file_name": "system_architecture.md",
+      "stored_file_name": "67024ae5b8264f22b78f859fcac52cea.md",
+      "chunk_index": 0,
+      "file_hash": "50622d967ddbf40e4ffa8393b3d8bb2de260506decdbdd741bc863c6b70a1993",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "别，通过 LOG_LEVEL 环境变量控制\n\n## 2. 系统分层\n\n系统采用三层架构：展示层、应用层、数据层。\n\n### 2.1 展示层（前端）\n- Next.js 16 + React 19 + Tailwind CSS 4\n- 文档上传界面、问答交互界面、知识图谱可视化\n- 支持 SSE 流式输出\n\n### 2.2 应用层（后端）\n- FastAPI 提供 RESTful API\n- Multi-Agent 编排器协调 5 个专业 Agent\n- LangGraph 7 节点流水线（planner→retriever→evaluator→rewriter→generator→auditor→fallback）\n\n### 2.3 数据层\n- FAISS 向量存储（IndexFlatIP 内积索引）\n- BM25 关键词索引（jieba + rank-bm25）\n- Neo4j 知识图谱（APOC 插件支持高级查询）\n\n## 3. 检索配置\n\n- VECTOR_WEIGHT = 0.65（向量检索权重）\n- BM25_WEIGHT = 0.15（关键词检索权重）\n- GRAPH_WEIGHT = 0.20（",
+    "metadata": {
+      "file_name": "system_architecture.md",
+      "stored_file_name": "67024ae5b8264f22b78f859fcac52cea.md",
+      "chunk_index": 1,
+      "file_hash": "50622d967ddbf40e4ffa8393b3d8bb2de260506decdbdd741bc863c6b70a1993",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "BM25_WEIGHT = 0.15（关键词检索权重）\n- GRAPH_WEIGHT = 0.20（图谱检索权重）\n- VECTOR_SEARCH_TOP_K = 10\n- BM25_TOP_K = 10\n- GRAPH_SEARCH_DEPTH = 2\n- VERIFICATION_THRESHOLD = 0.8\n\n## 4. 文档处理配置\n\n- CHUNK_SIZE = 512（分块大小）\n- CHUNK_OVERLAP = 50（分块重叠）\n- MAX_FILE_SIZE = 100MB (104857600 字节)\n\n## 5. 安全配置\n\n- API Key 鉴权: X-API-Key 请求头，通过 API_KEYS 环境变量配置，支持多个 Key 逗号分隔\n- 限流: SlowAPIMiddleware，默认每分钟 60 次请求 (RATE_LIMIT_PER_MIN=60)\n- CORS: 支持 localhost:3000 和 localhost:5173\n\n## 6. 持久化机制\n\n- FAISS 索引: faiss.index 文件 + documents.json 文档列表\n- BM25",
+    "metadata": {
+      "file_name": "system_architecture.md",
+      "stored_file_name": "67024ae5b8264f22b78f859fcac52cea.md",
+      "chunk_index": 2,
+      "file_hash": "50622d967ddbf40e4ffa8393b3d8bb2de260506decdbdd741bc863c6b70a1993",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "SS 索引: faiss.index 文件 + documents.json 文档列表\n- BM25 索引: bm25.pkl (pickle) + bm25_documents.json\n- Neo4j: 图数据库独立持久化\n- 文档原文: data/raw/ 目录\n",
+    "metadata": {
+      "file_name": "system_architecture.md",
+      "stored_file_name": "67024ae5b8264f22b78f859fcac52cea.md",
+      "chunk_index": 3,
+      "file_hash": "50622d967ddbf40e4ffa8393b3d8bb2de260506decdbdd741bc863c6b70a1993",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# GraphRAG Copilot Agent 架构文档\n\n## 1. 编排器架构\n\n系统有两套编排器实现：\n\n### 1.1 LegacyOrchestrator（旧版 5 节点手动编排）\n- QueryUnderstandingAgent → RetrievalAgent → ReasoningAgent → VerificationAgent → GenerationAgent\n- 通过 process_query(query, top_k) 方法调用\n- 每个阶段的 trace 记录在返回结果中\n\n### 1.2 LangGraphOrchestrator（新版 7 节点流水线）\n- planner → retriever → evaluator(CRAG) → [rewriter → retriever] → generator → auditor\n- 基于 LangGraph StateGraph 构建\n- 支持 CRAG（Corrective RAG）自动路由：use/rewrite/fallback\n\n## 2. Agent 详细接口\n\n### 2.1 QueryUnderstandingA",
+    "metadata": {
+      "file_name": "agent_architecture.md",
+      "stored_file_name": "a1786aa66e0e4486964ead288f05d420.md",
+      "chunk_index": 0,
+      "file_hash": "e6423712a1bd1390a53ab6e9ecac6e26abda5c1cd69f9c1c3a70be527bf4573d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "ack\n\n## 2. Agent 详细接口\n\n### 2.1 QueryUnderstandingAgent\n- 方法: analyze(query) → dict\n- 输出字段: intent（意图）、entities（实体）、keywords（关键词）、complexity（复杂度）、requires_multi_hop（是否多跳）、query_rewrite（改写后的查询）\n\n### 2.2 RetrievalAgent\n- 方法: hybrid_search(query, entities, top_k) → dict\n- 调用链路:\n  1. embedding_service.embed_query(query) 生成查询向量\n  2. vector_store.search(query_embedding, top_k) 向量检索\n  3. bm25_store.search(query, top_k) 关键词检索\n  4. kg_service.graph_rag_search(entities, query, depth=2) 图谱检索\n  5. evidence_fusion_servic",
+    "metadata": {
+      "file_name": "agent_architecture.md",
+      "stored_file_name": "a1786aa66e0e4486964ead288f05d420.md",
+      "chunk_index": 1,
+      "file_hash": "e6423712a1bd1390a53ab6e9ecac6e26abda5c1cd69f9c1c3a70be527bf4573d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": ", query, depth=2) 图谱检索\n  5. evidence_fusion_service.fuse(vector_results, bm25_results, graph_results, top_k) 融合结果\n- 返回: vector_results, bm25_results, graph_results, combined_context, warnings\n\n### 2.3 ReasoningAgent\n- 方法: reason(query, context, analysis) → dict\n- 输出字段: answer（答案）、reasoning_path（推理路径）、sources_used（使用的来源）、confidence（置信度）、limitations（局限性）\n- 特殊处理: 当 context 为空时，直接返回「当前知识库中没有找到足够信息回答这个问题」\n\n### 2.4 VerificationAgent\n- 方法: verify(query, answer, sources) → dict\n- 调用: llm_service.verify_answer(quest",
+    "metadata": {
+      "file_name": "agent_architecture.md",
+      "stored_file_name": "a1786aa66e0e4486964ead288f05d420.md",
+      "chunk_index": 2,
+      "file_hash": "e6423712a1bd1390a53ab6e9ecac6e26abda5c1cd69f9c1c3a70be527bf4573d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "rces) → dict\n- 调用: llm_service.verify_answer(question, answer, source_texts)\n- 输出字段: is_supported、hallucination_detected、confidence、issues、source_mapping\n\n### 2.5 GenerationAgent\n- 方法: generate(reasoning_result, verification_result) → str\n- 特殊处理: 当 confidence < 0.6 时，添加警告提示\n\n## 3. 流式编排器\n\n### 3.1 StreamingOrchestrator\n- 方法: process_query_stream(query, top_k) → Generator[dict]\n- 流程: Phase 1 问题理解 → Phase 2 混合检索 → Phase 3 流式推理（逐 token）→ Phase 4 校验\n\n## 4. 证据融合服务 (EvidenceFusionService)\n\n- 方法: fuse(vector_results",
+    "metadata": {
+      "file_name": "agent_architecture.md",
+      "stored_file_name": "a1786aa66e0e4486964ead288f05d420.md",
+      "chunk_index": 3,
+      "file_hash": "e6423712a1bd1390a53ab6e9ecac6e26abda5c1cd69f9c1c3a70be527bf4573d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "(EvidenceFusionService)\n\n- 方法: fuse(vector_results, bm25_results, graph_results, top_k) → list\n- 融合逻辑: 按内容指纹去重，计算 fusion_score = base_score × type_weight\n- 类型权重: vector=0.65, bm25=0.15, graph=0.20\n- BM25 过滤: score < 0.1 的结果被过滤\n- compress_context: 截取每个片段前 200 字符，减少 LLM 输入长度\n",
+    "metadata": {
+      "file_name": "agent_architecture.md",
+      "stored_file_name": "a1786aa66e0e4486964ead288f05d420.md",
+      "chunk_index": 4,
+      "file_hash": "e6423712a1bd1390a53ab6e9ecac6e26abda5c1cd69f9c1c3a70be527bf4573d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# GraphRAG Copilot API 端点文档\n\n## API 路由列表\n\n所有端点以 /api 为前缀。\n\n### 1. 文档管理\n- POST /api/documents/upload - 文档上传，接收文件，解析、分块、向量化，后台执行实体抽取\n\n### 2. 问答\n- POST /api/query - 非流式问答，使用 LegacyOrchestrator.process_query 同步返回完整结果\n- POST /api/query/stream - 流式问答 SSE 端点，使用 StreamingOrchestrator\n\n### 3. 向量检索\n- POST /api/vector/search - 向量搜索\n- GET /api/vector/stats - 向量存储统计\n\n### 4. 知识图谱\n- GET /api/graph/stats - 图谱统计\n- GET /api/graph/entity/{entity_name} - 实体查询\n- GET /api/graph/path - 路径查找\n- GET /api/graph - 全量图谱\n\n### 5. 系统\n- GE",
+    "metadata": {
+      "file_name": "api_endpoints.md",
+      "stored_file_name": "f5dfdd5fa0754e62afdde3a4e9ef2f7f.md",
+      "chunk_index": 0,
+      "file_hash": "977086fc979ced4b9805312ce8e7e092fe7fdad60515e83bd5eba56313649e96",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "ath - 路径查找\n- GET /api/graph - 全量图谱\n\n### 5. 系统\n- GET /api/system/status - 系统状态\n- GET /health - 健康检查\n\n## 文档上传完整流程\n\n1. 用户上传文件到 /documents/upload\n2. document_parser.parse 解析文件\n3. chunk_text 分块（chunk_size=512, chunk_overlap=50）\n4. embedding_service.embed 生成向量\n5. vector_store.add_documents 存入 FAISS 向量库\n6. bm25_store.add_documents 存入 BM25 索引\n7. 后台 _extract_entities_background 执行实体抽取\n8. kg_service.ingest_knowledge 写入 Neo4j\n",
+    "metadata": {
+      "file_name": "api_endpoints.md",
+      "stored_file_name": "f5dfdd5fa0754e62afdde3a4e9ef2f7f.md",
+      "chunk_index": 1,
+      "file_hash": "977086fc979ced4b9805312ce8e7e092fe7fdad60515e83bd5eba56313649e96",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# GraphRAG Copilot 知识图谱文档\n\n## 1. 图数据库配置\n\n- 数据库: Neo4j 5.x\n- 插件: APOC\n- 连接: bolt://localhost:7687\n\n## 2. 实体类型\n\nPerson、Organization、Product、Technology、Concept、Document、Event、Location、Entity\n\n## 3. 关系类型\n\nUSES、BELONGS_TO、DEPENDS_ON、RELATED_TO、CAUSES、PART_OF、COMPARES_WITH、CONTAINS、CREATED、WORKS_FOR\n\n## 4. 实体抽取流程\n\n- llm_service.extract_entities(text) 接收文本前 3000 字符\n- 返回 JSON 格式的 entities 和 relations 列表\n- kg_service.ingest_knowledge 通过 UNWIND 批量 MERGE 写入 Neo4j\n\n## 5. 图谱查询操作\n\n- graph_rag_search(entities, query, dept",
+    "metadata": {
+      "file_name": "knowledge_graph.md",
+      "stored_file_name": "15361cbb7a644295b127c1a48f4259bb.md",
+      "chunk_index": 0,
+      "file_hash": "43f39e1ce7d42af86bcc23929de9157fd925e0664807df14f48d0c9ef2a20fbc",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": ". 图谱查询操作\n\n- graph_rag_search(entities, query, depth=2) - 实体+关系+路径搜索\n- search_neighbors(entity_name, depth) - 邻居查询\n- find_paths(source, target, max_depth) - 路径查找\n- get_stats() - 统计信息\n- get_all_graph(limit, type) - 全量图谱\n\n## 6. 错误处理\n\n- Neo4j 不可用时，kg_service.graph_rag_search 抛出异常\n- RetrievalAgent.hybrid_search 的 try-except 捕获并记录到 warnings\n- 向量检索和 BM25 检索仍然正常工作\n",
+    "metadata": {
+      "file_name": "knowledge_graph.md",
+      "stored_file_name": "15361cbb7a644295b127c1a48f4259bb.md",
+      "chunk_index": 1,
+      "file_hash": "43f39e1ce7d42af86bcc23929de9157fd925e0664807df14f48d0c9ef2a20fbc",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# service-parser 模块文档\n\n## 概述\n\n`DocumentParser` 是 GraphRAG Copilot 的多模态文档解析服务，负责将上传的文件解析为统一的文本格式。模块位于 `backend/app/services/document_parser.py`，通过单例 `doc_parser` 对外提供服务。\n\n## 支持的文件格式\n\n解析器通过 `supported_formats` 字典映射文件后缀到对应的解析方法：\n\n- **文档类**: `.pdf`（PyPDF2）、`.docx`（python-docx）、`.pptx`（python-pptx）、`.txt`、`.md`\n- **图片类**: `.jpg`、`.jpeg`、`.png`（PaddleOCR，`lang=\"ch\"`）\n- **音视频类**: `.mp4`、`.wav`、`.mp3`（Whisper ASR，`language=\"zh\"`）\n\n其中 `parse_audio` 直接复用 `parse_video` 的 Whisper 转录逻辑。\n\n## 文件哈希计算\n\n`_calculate_hash(path",
+    "metadata": {
+      "file_name": "service_parser",
+      "stored_file_name": "service_parser.md",
+      "chunk_index": 0,
+      "file_hash": "e4ea6f83399bcaab",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": " 的 Whisper 转录逻辑。\n\n## 文件哈希计算\n\n`_calculate_hash(path)` 方法使用 `hashlib.sha256` 对文件内容进行分块读取（每次 4096 字节），生成唯一的文件指纹（hexdigest）。该哈希值存储在返回结果的 `file_hash` 字段中，用于文档去重和索引关联。\n\n## 文本分块\n\n`chunk_text(text, chunk_size=None, overlap=None)` 方法将长文本切分为重叠片段：\n\n- **chunk_size**: 默认 `settings.CHUNK_SIZE = 512` 字符\n- **overlap**: 默认 `settings.CHUNK_OVERLAP = 50` 字符\n- 算法：滑动窗口，步长 = chunk_size - overlap。若文本长度不超过 chunk_size，直接返回单个块。\n\n## 解析输出结构\n\n`parse(file_path)` 返回统一的字典结构：\n\n```python\n{\n    \"file_path\": str,       # 绝对路径\n    \"file_name\":",
+    "metadata": {
+      "file_name": "service_parser",
+      "stored_file_name": "service_parser.md",
+      "chunk_index": 1,
+      "file_hash": "e4ea6f83399bcaab",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "   \"file_path\": str,       # 绝对路径\n    \"file_name\": str,       # 文件名\n    \"file_type\": str,       # 后缀（如 \".pdf\"）\n    \"file_hash\": str,       # SHA256 hexdigest\n    \"content\": {            # 含 type、full_text 及格式特有字段\n        \"type\": str,\n        \"full_text\": str,\n        # PDF: total_pages, pages; DOCX: paragraphs, tables; PPTX: total_slides, slides\n        # Image: ocr_results; Video: duration, segments\n    },\n    \"metadata\": {\"size\": int, \"modified\": float}\n}\n```\n\n## PDF 解析细节\n\n`parse_pdf` 使用 `pypdf2.PdfReader",
+    "metadata": {
+      "file_name": "service_parser",
+      "stored_file_name": "service_parser.md",
+      "chunk_index": 2,
+      "file_hash": "e4ea6f83399bcaab",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "```\n\n## PDF 解析细节\n\n`parse_pdf` 使用 `pypdf2.PdfReader` 逐页提取文本，返回 `total_pages`、`pages`（含页码和内容的列表）以及拼接后的 `full_text`。空页会被跳过。\n\n## DOCX 解析细节\n\n`parse_docx` 使用 `python-docx` 提取段落和表格。段落通过 `doc.paragraphs` 获取，表格通过 `doc.tables` 遍历每行每格。`full_text` 为所有非空段落的双换行拼接。\n\n## OCR 与 ASR\n\n- 图片解析使用 `PaddleOCR(use_angle_cls=True, lang=\"ch\")`，返回每个识别行的文本、置信度和边界框。\n- 音视频解析使用 Whisper（模型由 `settings.ASR_MODEL` 指定，默认 `\"base\"`），返回时间片段（start/end/text）和全文。\n",
+    "metadata": {
+      "file_name": "service_parser",
+      "stored_file_name": "service_parser.md",
+      "chunk_index": 3,
+      "file_hash": "e4ea6f83399bcaab",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# service-fusion 模块文档\n\n## 概述\n\n`EvidenceFusionService` 是 GraphRAG Copilot 的证据融合服务，负责将向量检索、BM25 检索和知识图谱三种来源的结果进行加权合并与去重。模块位于 `backend/app/services/evidence_fusion.py`，通过单例 `evidence_fusion_service` 对外提供服务。\n\n## fuse() 方法\n\n```python\ndef fuse(self, vector_results, bm25_results, graph_results, top_k=10) -> List[Dict]\n```\n\n融合流程分为三个阶段：\n\n### 1. 候选收集\n\n- **向量结果**: 直接取 `content`、`metadata.file_name`，类型标记为 `\"vector\"`，分数取 `doc.score`。\n- **BM25 结果**: 过滤掉 `score < 0.1` 的低分噪声，类型标记为 `\"bm25\"`。\n- **图谱结果**: 取 `graph_results[\"re",
+    "metadata": {
+      "file_name": "service_fusion",
+      "stored_file_name": "service_fusion.md",
+      "chunk_index": 0,
+      "file_hash": "8adf22399d2ef21d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "声，类型标记为 `\"bm25\"`。\n- **图谱结果**: 取 `graph_results[\"related_contexts\"]` 前 10 条，内容格式为 `\"实体: {name}; 类型: {type}; 图谱距离: {distance}\"`，分数计算为 `0.7 / max(distance, 1.0)`，类型标记为 `\"graph\"`。\n\n### 2. 去重与加权合并\n\n使用 `_fingerprint(content)` 生成去重 key：将内容规范化（去除多余空白、截取前 500 字符）后取 `hashlib.md5` hexdigest。\n\n每个候选的加权分数 = `base_score * type_weight`，其中 type_weight 来自配置：\n\n| 来源 | type_weight | 配置键 |\n|------|-------------|--------|\n| vector | 0.55 | `VECTOR_WEIGHT` |\n| bm25 | 0.15 | `BM25_WEIGHT` |\n| graph | 0.30 | `GRAPH_WEIGHT` |\n\n同一 fin",
+    "metadata": {
+      "file_name": "service_fusion",
+      "stored_file_name": "service_fusion.md",
+      "chunk_index": 1,
+      "file_hash": "8adf22399d2ef21d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "EIGHT` |\n| graph | 0.30 | `GRAPH_WEIGHT` |\n\n同一 fingerprint 出现多次时，fusion_score 累加，matched_by 列表合并（如 `[\"vector\", \"bm25\"]`）。\n\n### 3. 排序与截断\n\n按 `fusion_score` 降序排列，返回前 `top_k`（默认 10）条结果。\n\n## compress_context() 方法\n\n```python\ndef compress_context(self, evidences, max_chars=6000) -> List[Dict]\n```\n\n将融合后的证据列表压缩到指定字符数上限（默认 6000 字符），用于 LLM 上下文窗口控制：\n\n- 遍历证据列表，累计 `content` 长度\n- 若剩余空间不足，截断当前条目的 `content`（不拆分条目）\n- 超出上限后停止添加更多证据\n- 返回压缩后的证据副本，保持原始排序\n\n## 数据结构\n\n融合后的每条证据包含：\n\n```python\n{\n    \"content\": str,           # 证据文本\n   ",
+    "metadata": {
+      "file_name": "service_fusion",
+      "stored_file_name": "service_fusion.md",
+      "chunk_index": 2,
+      "file_hash": "8adf22399d2ef21d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "`python\n{\n    \"content\": str,           # 证据文本\n    \"source\": str,            # 来源文件名或 \"knowledge_graph\"\n    \"type\": str,              # \"vector\" / \"bm25\" / \"graph\"\n    \"score\": float,           # 原始分数\n    \"metadata\": dict,         # 原始元数据\n    \"fusion_score\": float,    # 加权融合分数\n    \"matched_by\": List[str],  # 命中的来源类型列表\n}\n```\n",
+    "metadata": {
+      "file_name": "service_fusion",
+      "stored_file_name": "service_fusion.md",
+      "chunk_index": 3,
+      "file_hash": "8adf22399d2ef21d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# service-vector 模块文档\n\n## 概述\n\n`VectorStore` 和 `EmbeddingService` 是 GraphRAG Copilot 的向量检索核心模块，分别负责向量索引管理和文本向量化。模块位于 `backend/app/services/vector_store.py`，通过单例 `vector_store` 和 `embedding_service` 对外提供服务。\n\n## VectorStore 向量索引\n\n### 索引类型\n\n使用 FAISS 的 `IndexFlatIP`（内积索引），配合 L2 归一化后的向量实现余弦相似度检索。向量维度由 `settings.EMBEDDING_DIMENSION = 512` 决定。\n\n### 添加文档\n\n`add_documents(documents, embeddings)` 方法：\n\n1. 将 embedding 列表转为 `numpy.float32` 数组\n2. 调用 `faiss.normalize_L2` 进行 L2 归一化\n3. 在线程锁保护下调用 `index.add()` 写入索引\n4. 同步更新 `se",
+    "metadata": {
+      "file_name": "service_vector",
+      "stored_file_name": "service_vector.md",
+      "chunk_index": 0,
+      "file_hash": "44d8260e9236cbda",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "L2 归一化\n3. 在线程锁保护下调用 `index.add()` 写入索引\n4. 同步更新 `self.documents` 列表（含 id、content、metadata）\n5. 调用 `_save()` 持久化\n\n### 搜索\n\n`search(query_embedding, top_k=None)` 方法：\n\n1. 将查询向量转为 `numpy.float32` 并 L2 归一化\n2. 调用 `index.search(query_array, min(top_k, ntotal))`\n3. 返回含 `score`（内积 = 余弦相似度）和文档内容的结果列表\n4. 默认 `top_k` 取 `settings.VECTOR_SEARCH_TOP_K = 10`\n\n### 持久化\n\n存储目录为 `settings.VECTOR_DB_DIR`（默认 `data/vector_db/`）：\n\n- `faiss.index`: FAISS 索引二进制文件（`faiss.write_index`）\n- `documents.json`: 文档元数据 JSON（`json.dump`，`ensure_asc",
+    "metadata": {
+      "file_name": "service_vector",
+      "stored_file_name": "service_vector.md",
+      "chunk_index": 1,
+      "file_hash": "44d8260e9236cbda",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "ocuments.json`: 文档元数据 JSON（`json.dump`，`ensure_ascii=False`）\n\n启动时自动从磁盘恢复，加载失败则重建空索引。写入操作在 `threading.Lock` 保护下执行。\n\n## EmbeddingService 文本向量化\n\n### 模型加载\n\n优先加载 `SentenceTransformer` 模型（`settings.EMBEDDING_MODEL`，默认 `BAAI/bge-small-zh-v1.5`），设备由 `settings.EMBEDDING_DEVICE` 指定（默认 `\"cpu\"`）。加载前设置 `HF_HUB_OFFLINE=1` 优先使用本地缓存。\n\n若模型加载失败，降级为 `_hash_embed` 备选方案（基于 MD5 哈希的伪向量，维度 512）。\n\n### embed() 方法\n\n```python\ndef embed(self, texts: List[str]) -> List[List[float]]\n```\n\n- 使用 `model.encode(texts, normalize_embeddings=Tru",
+    "metadata": {
+      "file_name": "service_vector",
+      "stored_file_name": "service_vector.md",
+      "chunk_index": 2,
+      "file_hash": "44d8260e9236cbda",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "- 使用 `model.encode(texts, normalize_embeddings=True)`\n- 超过 10 条文本时显示进度条\n- 返回归一化后的向量列表\n\n### embed_query() 方法\n\n```python\ndef embed_query(self, query: str) -> List[float]\n```\n\n单条查询的便捷方法，内部调用 `embed([query])[0]`。\n\n### 哈希备选方案\n\n`_hash_embed` 对每条文本取 `hashlib.md5` 的 digest（16 字节），转为 float32 后 tile 到 512 维，再 L2 归一化。该方案仅用于模型不可用时的降级，检索质量有限。\n",
+    "metadata": {
+      "file_name": "service_vector",
+      "stored_file_name": "service_vector.md",
+      "chunk_index": 3,
+      "file_hash": "44d8260e9236cbda",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# service-bm25 模块文档\n\n## 概述\n\n`BM25Store` 是 GraphRAG Copilot 的 BM25 关键词检索服务，基于 `rank_bm25` 库的 `BM25Okapi` 算法实现，专为中文文档优化。模块位于 `backend/app/services/bm25_store.py`，通过单例 `bm25_store` 对外提供服务。\n\n## 分词策略\n\n`_tokenize(text)` 方法使用 `jieba.lcut(text)` 进行中文分词：\n\n- 调用 jieba 的精确模式（lcut）\n- 对分词结果进行 strip 和 lower 规范化\n- 过滤掉空白 token\n\njieba 分词对中文文本的效果远优于简单的 `str.split()`，是 BM25 检索质量的关键。\n\n## 添加文档\n\n`add_documents(documents)` 方法：\n\n1. 在线程锁（`threading.Lock`）保护下执行\n2. 遍历文档列表，提取 `content` 字段\n3. 对每条内容调用 `_tokenize()` 生成 token 列表\n4. 追加到 `se",
+    "metadata": {
+      "file_name": "service_bm25",
+      "stored_file_name": "service_bm25.md",
+      "chunk_index": 0,
+      "file_hash": "c57df886b84252cd",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "字段\n3. 对每条内容调用 `_tokenize()` 生成 token 列表\n4. 追加到 `self.tokenized_corpus`\n5. 用完整的 tokenized_corpus 重建 `BM25Okapi` 实例\n6. 调用 `_save()` 持久化\n\n注意：每次添加文档都会重建整个 BM25 索引，这是因为 `BM25Okapi` 不支持增量更新。\n\n## 搜索\n\n`search(query, top_k=10)` 方法：\n\n1. 对查询文本进行 jieba 分词\n2. 调用 `bm25.get_scores(query_tokens)` 获取每篇文档的 BM25 原始分数\n3. 按分数降序排列，取前 `top_k` 条\n4. 对每条结果进行 Sigmoid 归一化：\n\n```python\nnormalized = 1.0 / (1.0 + 2.718 ** (-float(score) + 3.0))\n```\n\nSigmoid 归一化的效果：score=0 映射到约 0.05，score=3 映射到 0.5，score=5 映射到约 0.88，score=10 映射到约 0.999。这避免",
+    "metadata": {
+      "file_name": "service_bm25",
+      "stored_file_name": "service_bm25.md",
+      "chunk_index": 1,
+      "file_hash": "c57df886b84252cd",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": " 映射到 0.5，score=5 映射到约 0.88，score=10 映射到约 0.999。这避免了 BM25 原始分数（通常在 0~20+ 范围）直接暴露给融合层，同时保留了分数的相对排序。\n\n## 持久化\n\n存储目录为 `settings.VECTOR_DB_DIR`（默认 `data/vector_db/`）：\n\n- `bm25.pkl`: pickle 序列化的 tokenized_corpus（`pickle.dump`）\n- `bm25_documents.json`: 文档原始数据 JSON\n\n启动时自动从磁盘恢复。若 `bm25.pkl` 或 `bm25_documents.json` 不存在，则跳过加载。加载失败时重置为空状态并记录日志。\n\n## 统计信息\n\n`get_stats()` 返回：\n\n```python\n{\n    \"type\": \"bm25\",\n    \"total_documents\": int,   # 文档总数\n    \"ready\": bool,            # BM25 索引是否就绪\n    \"persisted\": bool,        # 持久化文",
+    "metadata": {
+      "file_name": "service_bm25",
+      "stored_file_name": "service_bm25.md",
+      "chunk_index": 2,
+      "file_hash": "c57df886b84252cd",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# BM25 索引是否就绪\n    \"persisted\": bool,        # 持久化文件是否存在\n}\n```\n\n## 线程安全\n\n所有写操作（`add_documents`）和持久化操作均在 `threading.Lock` 保护下执行，`_save()` 方法注释明确要求必须在锁内调用。搜索操作（`search`）为只读，无需加锁。\n",
+    "metadata": {
+      "file_name": "service_bm25",
+      "stored_file_name": "service_bm25.md",
+      "chunk_index": 3,
+      "file_hash": "c57df886b84252cd",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# service-kg 模块文档\n\n## 概述\n\n`KnowledgeGraphService` 是 GraphRAG Copilot 的知识图谱服务，基于 Neo4j 图数据库实现实体和关系的存储、查询与图遍历。模块位于 `backend/app/services/kg_service.py`，通过单例 `kg_service` 对外提供服务。\n\n## Neo4j 连接\n\n通过 `neo4j.GraphDatabase.driver` 建立 Bolt 协议连接：\n\n- **URI**: `settings.NEO4J_URI`（默认 `bolt://localhost:7687`）\n- **认证**: `settings.NEO4J_USER`（默认 `\"neo4j\"`）/ `settings.NEO4J_PASSWORD`（默认 `\"password\"`）\n- 启动时调用 `driver.verify_connectivity()` 验证连接\n- 若 neo4j 包未安装或连接失败，`driver` 设为 `None`，图谱功能降级为不可用\n\n## 实体类型\n\n通过 `ALLOWED_ENTITY_TY",
+    "metadata": {
+      "file_name": "service_kg",
+      "stored_file_name": "service_kg.md",
+      "chunk_index": 0,
+      "file_hash": "ec35f462c64566c2",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": " `None`，图谱功能降级为不可用\n\n## 实体类型\n\n通过 `ALLOWED_ENTITY_TYPES` 白名单控制，共 9 种：\n\n`Person`, `Organization`, `Product`, `Technology`, `Concept`, `Document`, `Event`, `Location`, `Entity`\n\n`safe_label()` 函数将不在白名单中的类型回退为默认值 `DEFAULT_ENTITY_TYPE = \"Entity\"`。\n\n## 关系类型\n\n通过 `ALLOWED_RELATION_TYPES` 白名单控制，共 10 种：\n\n`USES`, `BELONGS_TO`, `DEPENDS_ON`, `RELATED_TO`, `CAUSES`, `PART_OF`, `COMPARES_WITH`, `CONTAINS`, `CREATED`, `WORKS_FOR`\n\n`safe_relation_type()` 函数将不在白名单中的类型回退为 `DEFAULT_RELATION_TYPE = \"RELATED_TO\"`。\n\n## 实体与关系创建\n\n-",
+    "metadata": {
+      "file_name": "service_kg",
+      "stored_file_name": "service_kg.md",
+      "chunk_index": 1,
+      "file_hash": "ec35f462c64566c2",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "AULT_RELATION_TYPE = \"RELATED_TO\"`。\n\n## 实体与关系创建\n\n- `create_entity(entity)`: 使用 Cypher `MERGE` 按 name 去重写入，设置 properties、confidence（默认 0.8）和 updated_at。\n- `create_relation(source, target, relation_type, properties)`: 使用 `MATCH` + `MERGE` 在两个已存在实体间创建关系。\n\n## 批量写入（ingest_knowledge）\n\n`ingest_knowledge(entities, relations)` 是批量入库的核心方法：\n\n1. 按 entity type 分组，每组调用 `_batch_merge_entities()` 使用 `UNWIND` 批量 MERGE\n2. 按 relation type 分组，每组调用 `_batch_merge_relations()` 使用 `UNWIND` 批量 MERGE\n3. 返回 `{\"entities_created\": int,",
+    "metadata": {
+      "file_name": "service_kg",
+      "stored_file_name": "service_kg.md",
+      "chunk_index": 2,
+      "file_hash": "ec35f462c64566c2",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "`UNWIND` 批量 MERGE\n3. 返回 `{\"entities_created\": int, \"relations_created\": int}` 统计\n\n该设计避免 N 条数据产生 N 个 Neo4j session，显著加速大批量入图。\n\n## 图谱搜索\n\n### search_neighbors(entity_name, depth=2)\n\n从指定实体出发，沿任意方向遍历 `depth` 跳（限制 1~3），返回邻居列表（name、type、distance），按距离排序，限制 50 条。\n\n### graph_rag_search(query_entities, query, depth=2)\n\nRAG 专用的图检索方法：\n\n1. 对每个查询实体调用 `search_neighbors` 获取邻居\n2. 若查询实体 >= 2 个，两两调用 `find_paths` 寻找路径\n3. 去重合并所有邻居到 `related_contexts`\n\n### find_paths(source, target, max_depth=3)\n\n使用 Cypher 可变长度路径查询，返回最短的 5 条路径，每条",
+    "metadata": {
+      "file_name": "service_kg",
+      "stored_file_name": "service_kg.md",
+      "chunk_index": 3,
+      "file_hash": "ec35f462c64566c2",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "t, max_depth=3)\n\n使用 Cypher 可变长度路径查询，返回最短的 5 条路径，每条包含节点列表和关系类型列表。\n\n## 全图可视化\n\n`get_all_graph(limit=500, entity_type=\"all\")` 返回前端力导向图所需的数据结构：\n\n- **nodes**: id、label、type、degree（连接数）、confidence、source（跳转链接）\n- **links**: source、target、relation、weight\n- 节点 source 字段根据属性决定跳转类型：`source_url` -> URL 跳转，`doc_id` -> 文档跳转，否则打开邻居详情面板\n",
+    "metadata": {
+      "file_name": "service_kg",
+      "stored_file_name": "service_kg.md",
+      "chunk_index": 4,
+      "file_hash": "ec35f462c64566c2",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# service-llm 模块文档\n\n## 概述\n\n`LLMService` 是 GraphRAG Copilot 的大语言模型调用服务，通过 OpenAI 兼容 API 统一接入多种 LLM。模块位于 `backend/app/services/llm_service.py`，通过单例 `llm_service` 对外提供服务。\n\n## 模型配置\n\n初始化时按优先级选择 LLM 提供商：\n\n1. **智谱 GLM**: 若 `ZHIPU_API_KEY` 环境变量存在，使用智谱 API（`ZHIPU_BASE_URL`，默认 `https://open.bigmodel.cn/api/paas/v4`），模型固定为 `glm-4-flash`\n2. **通用 OpenAI 兼容**: 否则使用 `settings.LLM_API_KEY` 和 `settings.LLM_BASE_URL`，模型为 `settings.LLM_MODEL`\n\n客户端参数：\n- `timeout=120.0` 秒\n- `max_retries=3`\n\n## chat() 方法\n\n```python\ndef chat(self",
+    "metadata": {
+      "file_name": "service_llm",
+      "stored_file_name": "service_llm.md",
+      "chunk_index": 0,
+      "file_hash": "85757cdea9a3fa88",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "_retries=3`\n\n## chat() 方法\n\n```python\ndef chat(self, messages: List[Dict[str, str]], **kwargs) -> str\n```\n\n核心 LLM 调用方法，支持重试机制：\n\n- **重试条件**: `RateLimitError`、`APIConnectionError`、`ConnectionError`、`ConnectionResetError`、空返回内容\n- **退避策略**: 指数退避，限流错误等待 5s/10s/20s，空内容等待 3s/6s/12s\n- **最大重试**: 3 次\n- 支持通过 kwargs 覆盖 `model`、`temperature`（默认 0.3）、`max_tokens`（默认 4096）\n\n## chat_stream() 方法\n\n```python\ndef chat_stream(self, messages, **kwargs) -> Generator[str, None, None]\n```\n\n流式调用 LLM，逐 token yield。设置 `stream=True`，遍历 ",
+    "metadata": {
+      "file_name": "service_llm",
+      "stored_file_name": "service_llm.md",
+      "chunk_index": 1,
+      "file_hash": "85757cdea9a3fa88",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "]\n```\n\n流式调用 LLM，逐 token yield。设置 `stream=True`，遍历 chunk 提取 `delta.content`。异常时 yield 错误信息而非抛出异常。\n\n## chat_json() 方法\n\n```python\ndef chat_json(self, messages, **kwargs) -> Dict[str, Any]\n```\n\n在 `chat()` 基础上调用 `extract_json_object()` 从 LLM 返回文本中提取 JSON 对象。用于需要结构化输出的场景。\n\n## extract_entities() 方法\n\n```python\ndef extract_entities(self, text: str) -> Dict[str, Any]\n```\n\n知识图谱实体抽取专用方法：\n\n- **System Prompt**: 指示 LLM 作为知识图谱抽取专家，输出 JSON 格式\n- **输入**: 文本前 3000 字符\n- **输出结构**:\n  - `entities`: 列表，每项含 `name`、`type`（9 种实体类型）、`c",
+    "metadata": {
+      "file_name": "service_llm",
+      "stored_file_name": "service_llm.md",
+      "chunk_index": 2,
+      "file_hash": "85757cdea9a3fa88",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": ":\n  - `entities`: 列表，每项含 `name`、`type`（9 种实体类型）、`confidence`、`properties`\n  - `relations`: 列表，每项含 `source`、`target`、`type`（10 种关系类型）、`confidence`、`properties`\n\n## verify_answer() 方法\n\n```python\ndef verify_answer(self, question, answer, sources) -> Dict[str, Any]\n```\n\n答案验证方法，检查 LLM 生成的答案是否被来源文档支持：\n\n- **输入**: 原始问题、生成答案、来源文本列表\n- **System Prompt**: 指示 LLM 作为答案验证专家\n- **输出结构**:\n  - `is_supported`: bool，答案是否被来源支持\n  - `hallucination_detected`: bool，是否检测到幻觉\n  - `confidence`: float，验证置信度\n  - `issues`: list，问题列表\n  - `s",
+    "metadata": {
+      "file_name": "service_llm",
+      "stored_file_name": "service_llm.md",
+      "chunk_index": 3,
+      "file_hash": "85757cdea9a3fa88",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "dence`: float，验证置信度\n  - `issues`: list，问题列表\n  - `source_mapping`: dict，答案与来源的映射关系\n\n## 错误处理\n\n所有公开方法均有异常捕获和日志记录。chat() 在重试耗尽后抛出原始异常，chat_stream() 在异常时 yield 错误文本而非崩溃。\n",
+    "metadata": {
+      "file_name": "service_llm",
+      "stored_file_name": "service_llm.md",
+      "chunk_index": 4,
+      "file_hash": "85757cdea9a3fa88",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# config-all 配置参考文档\n\n## 概述\n\nGraphRAG Copilot 的全局配置通过 `pydantic_settings.BaseSettings` 管理，支持 `.env` 文件和环境变量覆盖。配置类位于 `backend/config/settings.py`，以单例 `settings` 对外暴露。\n\n## 应用基础配置\n\n| 配置项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|------|\n| `APP_NAME` | str | `\"GraphRAG Copilot\"` | 应用名称 |\n| `APP_VERSION` | str | `\"1.0.0\"` | 版本号 |\n| `DEBUG` | bool | `False` | 调试模式 |\n| `HOST` | str | `\"0.0.0.0\"` | 监听地址 |\n| `PORT` | int | `8000` | 监听端口 |\n\n## 目录结构\n\n| 配置项 | 默认路径 | 说明 |\n|--------|----------|------|\n| `BASE_DIR` | `ba",
+    "metadata": {
+      "file_name": "config_all",
+      "stored_file_name": "config_all.md",
+      "chunk_index": 0,
+      "file_hash": "ce240462424aa19f",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": " |\n|--------|----------|------|\n| `BASE_DIR` | `backend/` | 项目根目录 |\n| `DATA_DIR` | `backend/data/` | 数据根目录 |\n| `RAW_DIR` | `backend/data/raw/` | 原始上传文件目录 |\n| `PROCESSED_DIR` | `backend/data/processed/` | 处理后文件目录 |\n| `VECTOR_DB_DIR` | `backend/data/vector_db/` | 向量索引存储目录 |\n| `GRAPH_DB_DIR` | `backend/data/graph_db/` | 图数据库目录 |\n\n启动时自动创建所有目录（`mkdir(parents=True, exist_ok=True)`）。\n\n## LLM 配置\n\n| 配置项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|------|\n| `LLM_PROVIDER` | str | `\"openai\"` | LLM 提供商 |\n| `LLM_MODEL` ",
+    "metadata": {
+      "file_name": "config_all",
+      "stored_file_name": "config_all.md",
+      "chunk_index": 1,
+      "file_hash": "ce240462424aa19f",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "DER` | str | `\"openai\"` | LLM 提供商 |\n| `LLM_MODEL` | str | `\"glm-4-flash\"` | 模型名称 |\n| `LLM_API_KEY` | Optional[str] | `None` | API Key（从 .env 读取） |\n| `LLM_BASE_URL` | Optional[str] | `None` | API Base URL |\n| `LLM_TEMPERATURE` | float | `0.3` | 生成温度 |\n| `LLM_MAX_TOKENS` | int | `4096` | 最大 token 数 |\n| `ZHIPU_API_KEY` | Optional[str] | `None` | 智谱 API Key |\n| `ZHIPU_BASE_URL` | str | `\"https://open.bigmodel.cn/api/paas/v4\"` | 智谱 API 地址 |\n\n## Embedding 配置\n\n| 配置项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|----",
+    "metadata": {
+      "file_name": "config_all",
+      "stored_file_name": "config_all.md",
+      "chunk_index": 2,
+      "file_hash": "ce240462424aa19f",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|------|\n| `EMBEDDING_MODEL` | str | `\"BAAI/bge-small-zh-v1.5\"` | SentenceTransformer 模型 |\n| `EMBEDDING_DIMENSION` | int | `512` | 向量维度 |\n| `EMBEDDING_DEVICE` | str | `\"cpu\"` | 推理设备 |\n\n## 检索配置\n\n| 配置项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|------|\n| `VECTOR_STORE_TYPE` | str | `\"faiss\"` | 向量存储类型 |\n| `VECTOR_SEARCH_TOP_K` | int | `10` | 向量检索返回条数 |\n| `BM25_TOP_K` | int | `10` | BM25 检索返回条数 |\n| `CHUNK_SIZE` | int | `512` | 文本分块大小（字符） |\n| `CHUNK_OVERLAP` | int | ",
+    "metadata": {
+      "file_name": "config_all",
+      "stored_file_name": "config_all.md",
+      "chunk_index": 3,
+      "file_hash": "ce240462424aa19f",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": " | `512` | 文本分块大小（字符） |\n| `CHUNK_OVERLAP` | int | `50` | 分块重叠长度（字符） |\n| `MAX_FILE_SIZE` | int | `104857600` (100MB) | 最大上传文件大小 |\n\n## 融合权重\n\n| 配置项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|------|\n| `VECTOR_WEIGHT` | float | `0.55` | 向量检索权重 |\n| `BM25_WEIGHT` | float | `0.15` | BM25 检索权重 |\n| `GRAPH_WEIGHT` | float | `0.30` | 知识图谱权重 |\n| `GRAPH_SEARCH_DEPTH` | int | `2` | 图遍历深度 |\n| `VERIFICATION_THRESHOLD` | float | `0.8` | 答案验证置信度阈值 |\n\n## Neo4j 配置\n\n| 配置项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|------|\n| `",
+    "metadata": {
+      "file_name": "config_all",
+      "stored_file_name": "config_all.md",
+      "chunk_index": 4,
+      "file_hash": "ce240462424aa19f",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "| 默认值 | 说明 |\n|--------|------|--------|------|\n| `NEO4J_URI` | str | `\"bolt://localhost:7687\"` | Bolt 连接地址 |\n| `NEO4J_USER` | str | `\"neo4j\"` | 用户名 |\n| `NEO4J_PASSWORD` | str | `\"password\"` | 密码 |\n\n## 多模态配置\n\n| 配置项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|------|\n| `OCR_ENGINE` | str | `\"paddleocr\"` | OCR 引擎 |\n| `ASR_MODEL` | str | `\"base\"` | Whisper ASR 模型 |\n| `ASR_DEVICE` | str | `\"cpu\"` | ASR 推理设备 |\n\n## 安全与限流\n\n| 配置项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|------|\n| `API_KEYS` | Optional[str] | `Non",
+    "metadata": {
+      "file_name": "config_all",
+      "stored_file_name": "config_all.md",
+      "chunk_index": 5,
+      "file_hash": "ce240462424aa19f",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "------|------|\n| `API_KEYS` | Optional[str] | `None` | 逗号分隔的允许 API Key 列表 |\n| `ENABLE_AUTH` | bool | `False` | 是否启用认证（默认关闭） |\n| `RATE_LIMIT_PER_MIN` | int | `60` | 每分钟请求限制 |\n| `CORS_ORIGINS` | list[str] | `[\"http://localhost:3000\", \"http://localhost:5173\"]` | CORS 允许源 |\n\n## 日志配置\n\n| 配置项 | 类型 | 默认值 | 说明 |\n|--------|------|--------|------|\n| `LOG_LEVEL` | str | `\"INFO\"` | 日志级别 |\n| `LOG_DIR` | Optional[str] | `None` | 日志目录（默认 `data/logs/`） |\n\n## 配置加载\n\n配置从 `backend/.env` 文件加载（`env_file_encoding=\"utf-8\"`），支持 `ext",
+    "metadata": {
+      "file_name": "config_all",
+      "stored_file_name": "config_all.md",
+      "chunk_index": 6,
+      "file_hash": "ce240462424aa19f",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "nd/.env` 文件加载（`env_file_encoding=\"utf-8\"`），支持 `extra=\"allow\"` 接受未声明的环境变量。所有敏感配置（API Key、密码）仅通过环境变量传入，仓库中不出现真实密钥。\n",
+    "metadata": {
+      "file_name": "config_all",
+      "stored_file_name": "config_all.md",
+      "chunk_index": 7,
+      "file_hash": "ce240462424aa19f",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# core-security 模块文档\n\n## 概述\n\n`security` 模块是 GraphRAG Copilot 的 API 认证与访问控制层，基于 FastAPI 依赖注入实现。模块位于 `backend/app/core/security.py`，提供 `require_api_key` 依赖函数。\n\n## require_api_key 依赖\n\n```python\nasync def require_api_key(x_api_key: Optional[str] = Header(default=None, alias=\"X-API-Key\")) -> str\n```\n\nFastAPI 依赖函数，用于在路由级别验证 API Key。使用方式：在路由装饰器或路由器上添加 `dependencies=[Depends(require_api_key)]`。\n\n### 认证流程\n\n1. **检查 ENABLE_AUTH 开关**：若 `settings.ENABLE_AUTH == False`（默认），直接返回 `\"auth_disabled\"`，不拦截任何请求。该设计保证本地开发和 Demo 场",
+    "metadata": {
+      "file_name": "core_security",
+      "stored_file_name": "core_security.md",
+      "chunk_index": 0,
+      "file_hash": "b09a08f6f9508d8d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "），直接返回 `\"auth_disabled\"`，不拦截任何请求。该设计保证本地开发和 Demo 场景零配置可用。\n\n2. **验证 API_KEYS 配置**：若 ENABLE_AUTH 为 True 但 `API_KEYS` 为空，返回 **503 Service Unavailable**。这是安全兜底，避免\"认证已开启但无密钥\"导致的裸奔。\n\n3. **验证请求头**：检查 `X-API-Key` 请求头是否在允许列表中。缺少或不匹配返回 **401 Unauthorized**，响应头包含 `WWW-Authenticate: ApiKey`。\n\n### API_KEYS 格式\n\n`API_KEYS` 环境变量为逗号分隔的字符串，由 `_allowed_keys()` 函数解析：\n\n```python\ndef _allowed_keys() -> list[str]:\n    raw = (settings.API_KEYS or \"\").strip()\n    return [k.strip() for k in raw.split(\",\") if k.strip()]\n```\n\n示例：`API_",
+    "metadata": {
+      "file_name": "core_security",
+      "stored_file_name": "core_security.md",
+      "chunk_index": 1,
+      "file_hash": "b09a08f6f9508d8d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "or k in raw.split(\",\") if k.strip()]\n```\n\n示例：`API_KEYS=key1,key2,key3`。空白项会被自动过滤。\n\n## SlowAPIMiddleware 速率限制\n\n在 FastAPI 应用层通过 `slowapi` 库实现基于 IP 的速率限制：\n\n- 默认限制：`settings.RATE_LIMIT_PER_MIN = 60` 次/分钟/每 IP\n- 超限返回 **429 Too Many Requests**\n- 限流装饰器应用于需要保护的路由\n\n## 安全设计原则\n\n1. **默认开放，按需启用**：`ENABLE_AUTH` 默认为 `False`，降低本地开发门槛\n2. **Fail-safe 设计**：认证开启但未配置密钥时拒绝请求（503），而非默默放行\n3. **密钥不入库**：真实 API Key 只能写在 `.env` 文件中（已被 `.gitignore` 排除），仓库代码、测试、文档中不得出现真实密钥\n4. **Header 规范**：使用标准 `X-API-Key` 自定义请求头，别名通过 FastAPI 的 `Header(",
+    "metadata": {
+      "file_name": "core_security",
+      "stored_file_name": "core_security.md",
+      "chunk_index": 2,
+      "file_hash": "b09a08f6f9508d8d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "**：使用标准 `X-API-Key` 自定义请求头，别名通过 FastAPI 的 `Header(alias=...)` 映射\n\n## 使用示例\n\n```python\nfrom app.core.security import require_api_key\n\n@router.post(\"/documents/upload\", dependencies=[Depends(require_api_key)])\nasync def upload_document(file: UploadFile = File(...)):\n    ...\n```\n\n所有需要认证的路由（upload、query、stream）均已添加该依赖。\n",
+    "metadata": {
+      "file_name": "core_security",
+      "stored_file_name": "core_security.md",
+      "chunk_index": 3,
+      "file_hash": "b09a08f6f9508d8d",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# core-logger 模块文档\n\n## 概述\n\n`logger` 模块是 GraphRAG Copilot 的集中式日志服务，基于 `loguru` 库实现，提供统一的日志格式和文件轮转。模块位于 `backend/app/core/logger.py`，通过 `from app.core.logger import logger` 引用，替代项目中的 `print()` 和 `traceback.print_exc()`。\n\n## 日志级别\n\n通过环境变量 `LOG_LEVEL` 控制（默认 `\"INFO\"`），读取后转为大写。支持标准级别：DEBUG、INFO、WARNING、ERROR、CRITICAL。\n\n## 输出目标\n\n### 控制台输出（stderr）\n\n- 输出到 `sys.stderr`\n- 格式：`<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level",
+    "metadata": {
+      "file_name": "core_logger",
+      "stored_file_name": "core_logger.md",
+      "chunk_index": 0,
+      "file_hash": "1bb4a6860b32ae99",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "yan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>`\n- 启用彩色输出（`colorize=True`）\n- 关闭 backtrace 和 diagnose（避免控制台信息过载）\n\n### 文件输出\n\n- 路径：`{LOG_DIR}/app.log`，其中 `LOG_DIR` 优先取环境变量，否则默认为 `backend/data/logs/`\n- **轮转策略**: 文件大小达到 **10 MB** 时轮转（`rotation=\"10 MB\"`）\n- **保留策略**: 保留最近 **14 天** 的日志（`retention=\"14 days\"`）\n- 编码：UTF-8\n- 异步写入：`enqueue=True`，避免日志 I/O 阻塞主线程\n- 启用 backtrace（文件中保留完整堆栈），关闭 diagnose\n- 格式：`{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}`（无颜色标记）\n\n## 初",
+    "metadata": {
+      "file_name": "core_logger",
+      "stored_file_name": "core_logger.md",
+      "chunk_index": 1,
+      "file_hash": "1bb4a6860b32ae99",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "{name}:{function}:{line} - {message}`（无颜色标记）\n\n## 初始化流程\n\n1. 读取 `LOG_LEVEL` 环境变量\n2. 确定日志目录（`LOG_DIR` 环境变量 > 默认 `data/logs/`）\n3. 尝试创建日志目录，失败则将 `_LOG_DIR` 设为 `None`（不阻断应用启动）\n4. 调用 `_logger.remove()` 移除 loguru 默认处理器\n5. 添加 stderr 处理器\n6. 若日志目录可用，添加文件处理器\n\n## 日志目录容错\n\n日志目录创建失败时（权限不足等），文件处理器不会添加，但应用正常启动。仅控制台日志可用。\n\n## 使用方式\n\n```python\nfrom app.core.logger import logger\n\nlogger.info(\"Processing file: {}\", file_name)\nlogger.error(\"Failed to connect: {}\", error)\nlogger.exception(\"Unexpected error\")  # 自动附带异常堆栈\n```\n\nloguru ",
+    "metadata": {
+      "file_name": "core_logger",
+      "stored_file_name": "core_logger.md",
+      "chunk_index": 2,
+      "file_hash": "1bb4a6860b32ae99",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "ption(\"Unexpected error\")  # 自动附带异常堆栈\n```\n\nloguru 的 `{}` 占位符语法替代 `%s` 或 f-string，在日志未输出时避免字符串格式化开销。\n",
+    "metadata": {
+      "file_name": "core_logger",
+      "stored_file_name": "core_logger.md",
+      "chunk_index": 3,
+      "file_hash": "1bb4a6860b32ae99",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# route-upload 模块文档\n\n## 概述\n\n`POST /api/documents/upload` 是 GraphRAG Copilot 的文档上传接口，实现了从文件接收、解析、分块、向量化到索引入库的完整流水线。路由定义位于 `backend/app/api/routes.py` 的 `upload_document` 函数。\n\n## 请求规范\n\n- **方法**: POST\n- **路径**: `/api/documents/upload`\n- **Content-Type**: `multipart/form-data`\n- **参数**: `file`（UploadFile，必需）\n- **认证**: `Depends(require_api_key)`（受 ENABLE_AUTH 控制）\n\n## 处理流水线\n\n### 1. 文件验证\n\n`validate_upload_file(file)` 检查文件后缀是否在 `ALLOWED_EXTENSIONS` 集合中（.pdf, .docx, .pptx, .txt, .md, .jpg, .jpeg, .png, .mp3, .wav, .",
+    "metadata": {
+      "file_name": "route_upload",
+      "stored_file_name": "route_upload.md",
+      "chunk_index": 0,
+      "file_hash": "f8f6e85954851039",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": ".pptx, .txt, .md, .jpg, .jpeg, .png, .mp3, .wav, .mp4）。不支持的格式返回 400。\n\n读取文件内容后检查：\n- 空文件返回 400（`\"Uploaded file is empty\"`）\n- 超过 `settings.MAX_FILE_SIZE`（100MB）返回 413（`\"Uploaded file is too large\"`）\n\n### 2. 文件存储\n\n生成安全文件名：`uuid4().hex + suffix`（如 `a1b2c3d4...f5.pdf`），存储到 `settings.RAW_DIR` 目录。原始文件名保留在元数据中。\n\n### 3. 文档解析\n\n调用 `doc_parser.parse(file_path)` 进行多模态解析（PDF/DOCX/PPTX/图片OCR/音视频ASR），返回含 `file_hash`（SHA256）、`file_type`、`content.full_text` 的结构。解析失败返回 400。\n\n### 4. 文本分块\n\n调用 `doc_parser.chunk_text(full_text)`，使",
+    "metadata": {
+      "file_name": "route_upload",
+      "stored_file_name": "route_upload.md",
+      "chunk_index": 1,
+      "file_hash": "f8f6e85954851039",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "# 4. 文本分块\n\n调用 `doc_parser.chunk_text(full_text)`，使用 CHUNK_SIZE=512、CHUNK_OVERLAP=50 的滑动窗口切分。\n\n### 5. 向量化与索引\n\n- 调用 `embedding_service.embed(chunks)` 生成向量\n- 构建文档元数据（file_name、stored_file_name、chunk_index、file_hash、source_type）\n- 调用 `vector_store.add_documents(documents, embeddings)` 写入 FAISS 索引\n- 调用 `bm25_store.add_documents(documents)` 写入 BM25 索引\n- 索引失败返回 500\n\n### 6. 后台实体抽取\n\n通过 `background_tasks.add_task()` 异步执行 `_extract_entities_background()`：\n\n- 调用 `llm_service.extract_entities(full_text[:3000])` 抽取实体和关系\n",
+    "metadata": {
+      "file_name": "route_upload",
+      "stored_file_name": "route_upload.md",
+      "chunk_index": 2,
+      "file_hash": "f8f6e85954851039",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "rvice.extract_entities(full_text[:3000])` 抽取实体和关系\n- 调用 `kg_service.ingest_knowledge(entities, relations)` 批量写入 Neo4j\n- 异常仅记录日志，不影响上传响应\n\n## 响应结构\n\n```python\nclass DocumentResponse:\n    file_name: str           # 原始文件名\n    file_type: str           # 文件类型（如 \".pdf\"）\n    content_length: int      # 全文字符数\n    chunks_created: int      # 分块数量\n    entities_extracted: int  # 固定为 0（后台异步）\n    relations_extracted: int # 固定为 0（后台异步）\n    document_hash: str       # SHA256 文件哈希\n```\n\n注意：`entities_extracted` 和 `relations_extrac",
+    "metadata": {
+      "file_name": "route_upload",
+      "stored_file_name": "route_upload.md",
+      "chunk_index": 3,
+      "file_hash": "f8f6e85954851039",
+      "source_type": ".md"
+    }
+  },
+  {
+    "content": "希\n```\n\n注意：`entities_extracted` 和 `relations_extracted` 在响应中固定为 0，因为实体抽取在后台异步执行，上传时无法获取结果。\n\n## 错误处理\n\n| 状态码 | 触发条件 |\n|--------|----------|\n| 400 | 不支持的文件格式、空文件、解析失败、解析内容为空 |\n| 401 | API Key 无效（ENABLE_AUTH=true 时） |\n| 413 | 文件超过 100MB |\n| 500 | 向量/BM25 索引写入失败 |\n",
+    "metadata": {
+      "file_name": "route_upload",
+      "stored_file_name": "route_upload.md",
+      "chunk_index": 4,
+      "file_hash": "f8f6e85954851039",
+      "source_type": ".md"
+    }
+  }
+]

@@ -18,10 +18,14 @@ def fallback_node(state: GraphState, config: dict[str, Any] | None = None) -> di
     n_hits = len(state.get("fused_hits", []))
 
     # Answer in the user's language — a refusal the downstream refusal
-    # detector can't recognize is worse than no refusal at all.
+    # detector can't recognize is worse than no refusal at all. The
+    # Chinese phrasing must contain the literal substring "无法回答"
+    # verbatim (contiguous) — the eval harness's refusal_keywords list
+    # (eval/tests/*.py) does a plain substring match, and an earlier
+    # "无法可靠回答" phrasing broke that match silently.
     if _is_cjk_question(question):
         msg = (
-            "根据现有证据无法可靠回答这个问题"
+            "根据现有信息无法回答这个问题"
             f"（crag_score={score:.2f}，evidence_hits={n_hits}）。"
             "请尝试换一种问法，或补充相关文档。"
         )

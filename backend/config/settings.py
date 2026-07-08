@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     APP_NAME: str = "GraphRAG Copilot"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
@@ -49,8 +49,8 @@ class Settings(BaseSettings):
 
     GRAPH_SEARCH_DEPTH: int = 2
     VECTOR_WEIGHT: float = 0.55
-    BM25_WEIGHT: float = 0.25
-    GRAPH_WEIGHT: float = 0.20
+    BM25_WEIGHT: float = 0.15
+    GRAPH_WEIGHT: float = 0.30
     VERIFICATION_THRESHOLD: float = 0.8
 
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]

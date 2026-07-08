@@ -1,16 +1,24 @@
 """Rewriter node — rewrite the query and increment the rewrite counter.
 
-v3.2: the no-LLM fallback is a real query reformulation instead of the
-old ``"(rewrite N)"`` suffix (which re-issued an identical query to the
-retrievers and made the CRAG rewrite loop a no-op):
+Rewrite strategy, in precedence order:
 
-* iteration 1 — keyword condensation: strip question words / stopwords
-  and keep salient terms. This trades recall for precision and plays to
-  BM25's strengths.
-* iteration 2+ — keyword expansion: original question + salient terms
-  appended, which widens the vector-side match surface.
+1. an injected ``query_rewriter`` (``.rewrite(question, *, prior_rewrites)``
+   Protocol) always wins — lets callers plug in a bespoke strategy/eval
+   harness without touching this node.
+2. the orchestrator's ``llm_client`` — asked to reformulate the query
+   with a task-specific prompt (more precise keywords, sub-question
+   decomposition for multihop, synonym expansion).
+3. a deterministic heuristic when neither is available, so the CRAG
+   rewrite loop is never a no-op:
+   * iteration 1 — keyword condensation: strip question words /
+     stopwords and keep salient terms (jieba-tokenized). Trades recall
+     for precision and plays to BM25's strengths.
+   * iteration 2+ — keyword expansion: original question + salient
+     terms appended, widening the vector-side match surface.
 
-An injected ``query_rewriter`` (LLM-backed) always takes precedence.
+(The old fallback that just appended ``"(rewrite N)"`` re-issued an
+identical query to the retrievers and made the rewrite loop a no-op —
+both the heuristic above and the LLM path replace that.)
 """
 
 from __future__ import annotations
@@ -23,6 +31,16 @@ from .._utils import digest, now_iso
 from ..state import GraphState
 
 logger = logging.getLogger(__name__)
+
+REWRITER_PROMPT = (
+    "你是查询改写专家。根据原始问题和之前的检索结果，改写查询以提高检索质量。\n\n"
+    "规则：\n"
+    "1. 保持原始问题的核心意图不变\n"
+    "2. 使用更精确的关键词，避免模糊表述\n"
+    "3. 如果是多跳问题，拆分为更具体的子问题\n"
+    "4. 补充可能的同义词或相关术语\n"
+    "5. 只输出改写后的查询，不要解释"
+)
 
 _EN_STOP = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "do", "does",
@@ -73,9 +91,27 @@ def _heuristic_rewrite(question: str, prior: list[str], iteration: int) -> str:
     return candidate
 
 
+def _call_llm(llm: Any, question: str, prior_rewrites: list[str]) -> str | None:
+    """调用 LLM 改写查询；失败或空结果返回 None 交给启发式兜底。"""
+    try:
+        context = f"\n\n之前的改写尝试：{prior_rewrites[-1]}" if prior_rewrites else ""
+        result = llm.complete(
+            model="",
+            system=REWRITER_PROMPT,
+            user=f"原始问题：{question}{context}\n\n请改写查询：",
+            timeout_s=10.0,
+        )
+        rewritten = result.strip()
+        return rewritten or None
+    except Exception as e:
+        logger.warning("rewriter LLM failed: %s", e)
+        return None
+
+
 def rewriter_node(state: GraphState, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
     rewriter = cfg.get("query_rewriter")
+    llm = cfg.get("llm_client")
 
     question = state["question"]
     prior = list(state.get("query_rewrites", []))
@@ -84,7 +120,9 @@ def rewriter_node(state: GraphState, config: dict[str, Any] | None = None) -> di
     if rewriter is not None:
         new_query = rewriter.rewrite(question, prior_rewrites=prior)
     else:
-        new_query = _heuristic_rewrite(question, prior, iteration)
+        new_query = _call_llm(llm, question, prior) if llm is not None else None
+        if new_query is None:
+            new_query = _heuristic_rewrite(question, prior, iteration)
 
     audit = {
         "node": "rewriter",

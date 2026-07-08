@@ -23,10 +23,12 @@ class QueryResponse(BaseModel):
     query: str
     answer: str
     sources: List[Dict[str, Any]]
-    analysis: Dict[str, Any]
-    verification: Dict[str, Any]
+    analysis: Dict[str, Any] = {}
+    verification: Dict[str, Any] = {}
     trace: Dict[str, Any] = {}
     confidence: float = 0.0
+    crag_decision: str = "unknown"
+    auditor_verdict: str = "unknown"
 
 class DocumentResponse(BaseModel):
     file_name: str

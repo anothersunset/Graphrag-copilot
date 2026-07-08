@@ -22,8 +22,11 @@ def test_global_cue_plus_entity_is_hybrid():
 
 
 def test_local_mode_selects_chunk_and_kg_routes():
-    out = planner_node({"question": "Neo4j 的查询语言是什么?"}, {"enable_kg": True})
+    # "关系" (relational) is one of the intents that gates retrieve_kg on;
+    # plain factual questions ("是什么") deliberately don't need KG lookup.
+    out = planner_node({"question": "Neo4j 和 GraphRAG 是什么关系?"}, {"enable_kg": True})
     assert out["plan"]["mode"] == "local"
+    assert out["plan"]["intent"] == "relational"
     assert out["tools_to_call"] == ["retrieve_vector", "retrieve_bm25", "retrieve_kg"]
     assert "retrieve_kg_global" not in out["tools_to_call"]
 
@@ -31,14 +34,16 @@ def test_local_mode_selects_chunk_and_kg_routes():
 def test_global_mode_selects_community_route():
     out = planner_node({"question": "总结知识库主要主题"}, {"enable_kg": True})
     assert out["plan"]["mode"] == "global"
-    assert out["plan"]["intent"] == "sensemaking"
+    assert out["plan"]["intent"] == "summarize"
     assert "retrieve_kg_global" in out["tools_to_call"]
     # global questions don't need chunk routes
     assert "retrieve_vector" not in out["tools_to_call"]
 
 
 def test_hybrid_mode_selects_all_routes():
-    out = planner_node({"question": "总结一下 GraphRAG 相关内容"}, {"enable_kg": True})
+    # Global cue ("总结") + entity anchor (Neo4j) → hybrid; relational
+    # keyword ("关系") is what gates retrieve_kg on for the local half.
+    out = planner_node({"question": "总结一下 Neo4j 和 GraphRAG 的关系"}, {"enable_kg": True})
     assert out["plan"]["mode"] == "hybrid"
     assert "retrieve_vector" in out["tools_to_call"]
     assert "retrieve_kg" in out["tools_to_call"]

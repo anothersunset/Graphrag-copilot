@@ -1,7 +1,7 @@
 # Templated Python CI workflow.
 # DO NOT COMMIT THE RENDERED .yml FORM FROM THIS PROCESS DIRECTLY.
 # Use:
-#   make ci-activate           # renders __GHA_OPEN__/__GHA_CLOSE__ → $ ... 
+#   make ci-activate           # renders sentinel tokens into GitHub expressions
 # or:
 #   bash scripts/install-workflows.sh
 #
@@ -68,3 +68,18 @@ jobs:
           name: coverage-__GHA_OPEN__ replace(matrix.target, '/', '-') __GHA_CLOSE__
           path: __GHA_OPEN__ matrix.target __GHA_CLOSE__/coverage.xml
           if-no-files-found: ignore
+
+  legacy-backend-syntax:
+    name: "py / backend syntax gate"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile legacy backend sources
+        run: |
+          python -m compileall -q backend/main.py backend/config backend/app

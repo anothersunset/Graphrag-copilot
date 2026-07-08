@@ -30,12 +30,16 @@ class EvidenceFusionService:
             )
 
         for doc in bm25_results:
+            score = float(doc.get("score", 0.0) or 0.0)
+            # BM25 过滤：只保留高分结果，避免噪声
+            if score < 0.1:
+                continue
             candidates.append(
                 {
                     "content": doc.get("content", ""),
                     "source": doc.get("metadata", {}).get("file_name", "bm25_store"),
                     "type": "bm25",
-                    "score": float(doc.get("score", 0.0) or 0.0),
+                    "score": score,
                     "metadata": doc.get("metadata", {}),
                 }
             )

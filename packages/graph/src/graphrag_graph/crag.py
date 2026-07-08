@@ -10,8 +10,10 @@ We combine two signals:
 2. **Coverage** — fraction of the top-K hits whose score exceeds a
    confidence floor; this captures "does the evidence set look coherent".
 
-Final score = ``alpha * relevance + (1 - alpha) * coverage`` and is
-mapped to a decision via the thresholds locked in the v3.1 spec.
+Final score = ``alpha * relevance + (1 - alpha) * coverage``, damped by
+an always-on spread factor (see below), optionally blended with an
+LLM-judge signal, and mapped to a decision via ``use_threshold`` /
+``rewrite_threshold``.
 """
 
 from __future__ import annotations
@@ -40,28 +42,22 @@ class CragResult:
 class CragScorer:
     """Pluggable CRAG scorer.
 
-    Thresholds default to the v3.1 spec:
-      * score >= 0.7        → ``use``
-      * 0.3 <= score < 0.7  → ``rewrite``
-      * score < 0.3         → ``fallback``
-
-    v3.2 additions (both off by default, so v3.1 behaviour is unchanged):
-      * ``spread_penalty`` — retrieval scores that are uniformly flat
-        carry no ranking signal (weak result sets sneak through when a
-        normalizer inflates everything to ~the same value). When the
-        top-K score spread falls under ``min_spread`` the final score is
-        damped by up to ``spread_penalty``.
-      * ``judge`` — optional LLM-as-judge hook; its [0,1] semantic score
-        is blended with the statistical score via ``judge_weight``.
+    Thresholds (tuned after the 50-question benchmark — see
+    ``docs/devlog-2026-06-11-benchmark-evaluation.md`` §2.1/2.11; the
+    original v3.1 spec values of 0.7/0.3/0.5 routed 49/50 questions to
+    ``use`` and never exercised rewrite/fallback):
+      * score >= 0.5        → ``use``
+      * 0.2 <= score < 0.5  → ``rewrite``
+      * score < 0.2         → ``fallback``
     """
 
     def __init__(
         self,
         *,
         scorer: Scorer | None = None,
-        use_threshold: float = 0.7,
-        rewrite_threshold: float = 0.3,
-        coverage_floor: float = 0.5,
+        use_threshold: float = 0.5,
+        rewrite_threshold: float = 0.2,
+        coverage_floor: float = 0.3,
         alpha: float = 0.7,
         top_k: int = 5,
         spread_penalty: float = 0.0,
@@ -122,17 +118,30 @@ class CragScorer:
         ]
         coverage = sum(1 for s in effective if s >= self.coverage_floor) / len(effective)
 
-        final = self.alpha * relevance + (1.0 - self.alpha) * coverage
+        raw_final = self.alpha * relevance + (1.0 - self.alpha) * coverage
 
-        # Spread damping: a flat score distribution means the ranker
-        # couldn't separate strong from weak evidence.
-        spread = 0.0
+        # Always-on spread damping (eval-validated): a uniformly-high score
+        # set means the retriever/reranker couldn't discriminate between
+        # hits, which is itself a weak-evidence signal even when the mean
+        # score looks good. spread=0 → 0.85x, spread>=0.5 → 1.0x (no damping).
+        if len(effective) >= 2:
+            score_spread = max(effective) - min(effective)
+            spread_factor = min(1.0, score_spread * 2.0)
+        else:
+            spread_factor = 1.0
+        final = raw_final * (0.85 + 0.15 * spread_factor)
+
+        # Optional EXTRA damping (v3.2) for near-flat distributions using a
+        # stricter std-dev measure; off by default (spread_penalty=0) so it
+        # only kicks in when explicitly configured on top of the baseline
+        # spread_factor above.
         flatness = 0.0
+        std_spread = 0.0
         if len(effective) >= 3:
             mean = sum(effective) / len(effective)
-            spread = (sum((s - mean) ** 2 for s in effective) / len(effective)) ** 0.5
-            if self.spread_penalty > 0 and spread < self.min_spread:
-                flatness = 1.0 - spread / self.min_spread
+            std_spread = (sum((s - mean) ** 2 for s in effective) / len(effective)) ** 0.5
+            if self.spread_penalty > 0 and std_spread < self.min_spread:
+                flatness = 1.0 - std_spread / self.min_spread
                 final *= 1.0 - self.spread_penalty * flatness
 
         # Optional semantic judge blend (LLM-as-judge).
@@ -161,7 +170,7 @@ class CragScorer:
             detail={
                 "k": len(top),
                 "alpha": self.alpha,
-                "spread": round(spread, 4),
+                "spread_factor": round(spread_factor, 4),
                 "flatness": round(flatness, 4),
                 "semantic": semantic,
             },

@@ -88,11 +88,13 @@ class BM25Store:
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)[:top_k]
 
         results = []
-        max_score = max([score for _, score in ranked], default=1.0) or 1.0
-
+        # 使用绝对分数阈值而非相对归一化，避免弱结果被膨胀到 1.0
+        # BM25 分数通常在 0~20+ 范围，用 sigmoid 压缩到 0~1
         for idx, score in ranked:
             doc = self.documents[idx].copy()
-            doc["score"] = float(score / max_score)
+            # sigmoid 归一化: score=0→0.5, score=5→0.99, score=10→1.0
+            normalized = 1.0 / (1.0 + 2.718 ** (-float(score) + 3.0))
+            doc["score"] = round(normalized, 4)
             results.append(doc)
 
         return results

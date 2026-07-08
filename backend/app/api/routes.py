@@ -14,16 +14,40 @@ from app.api.schemas import (
 from app.core.constants import ALLOWED_EXTENSIONS
 from app.core.logger import logger
 from app.core.security import require_api_key
-from app.services.vector_store import vector_store, embedding_service
-from app.services.bm25_store import bm25_store
-from app.services.kg_service import kg_service
-from app.services.document_parser import doc_parser
-from app.services.llm_service import llm_service
-from app.agents.orchestrator import orchestrator, stream_orchestrator
-from app.core.readiness import observability_status, readiness_payload
 from config.settings import settings
 
 router = APIRouter()
+
+
+def _get_vector_store():
+    from app.services.vector_store import vector_store, embedding_service
+    return vector_store, embedding_service
+
+
+def _get_bm25_store():
+    from app.services.bm25_store import bm25_store
+    return bm25_store
+
+
+def _get_kg_service():
+    from app.services.kg_service import kg_service
+    return kg_service
+
+
+def _get_doc_parser():
+    from app.services.document_parser import doc_parser
+    return doc_parser
+
+
+def _get_llm_service():
+    from app.services.llm_service import llm_service
+    return llm_service
+
+
+def _get_readiness():
+    from app.core.readiness import observability_status, readiness_payload
+    return readiness_payload, observability_status
+
 
 def validate_upload_file(file: UploadFile):
     suffix = Path(file.filename or "").suffix.lower()
@@ -33,10 +57,12 @@ def validate_upload_file(file: UploadFile):
 def _extract_entities_background(file_name: str, full_text: str):
     """后台执行实体抽取与知识图谱导入"""
     try:
-        extraction = llm_service.extract_entities(full_text[:3000])
+        llm = _get_llm_service()
+        extraction = llm.extract_entities(full_text[:3000])
         entities = extraction.get("entities", [])
         relations = extraction.get("relations", [])
-        stats = kg_service.ingest_knowledge(entities, relations)
+        kg = _get_kg_service()
+        stats = kg.ingest_knowledge(entities, relations)
         logger.info(
             "[BG] {}: {} entities, {} relations",
             file_name,
@@ -65,8 +91,9 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
     with open(file_path, "wb") as f:
         f.write(content)
 
+    dp = _get_doc_parser()
     try:
-        doc_result = doc_parser.parse(str(file_path))
+        doc_result = dp.parse(str(file_path))
     except Exception as e:
         logger.exception("Document parse failed: {}", file.filename)
         raise HTTPException(status_code=400, detail="Document parse failed: " + str(e))
@@ -75,10 +102,11 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
     if not full_text:
         raise HTTPException(status_code=400, detail="Parsed document content is empty")
 
-    chunks = doc_parser.chunk_text(full_text)
+    chunks = dp.chunk_text(full_text)
 
     try:
-        embeddings = embedding_service.embed(chunks)
+        vs, es = _get_vector_store()
+        embeddings = es.embed(chunks)
         documents = [
             {
                 "content": chunk,
@@ -92,8 +120,8 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
             }
             for i, chunk in enumerate(chunks)
         ]
-        vector_store.add_documents(documents, embeddings)
-        bm25_store.add_documents(documents)
+        vs.add_documents(documents, embeddings)
+        _get_bm25_store().add_documents(documents)
     except Exception as e:
         logger.exception("Indexing failed for {}", file.filename)
         raise HTTPException(status_code=500, detail="Indexing failed: " + str(e))
@@ -119,9 +147,14 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
 
 @router.post("/query", response_model=QueryResponse, dependencies=[Depends(require_api_key)])
 async def query_knowledge(request: QueryRequest):
+    import asyncio
+    from app.agents.orchestrator import orchestrator
+
     start = time.perf_counter()
     try:
-        result = orchestrator.process_query(request.query, top_k=request.top_k)
+        # process_query is synchronous (blocking LLM calls); run it off the
+        # event loop thread so concurrent requests don't queue behind it.
+        result = await asyncio.to_thread(orchestrator.process_query, request.query, request.top_k)
         logger.info(
             "query completed top_k={} sources={} confidence={:.3f} elapsed_ms={:.1f}",
             request.top_k,
@@ -137,6 +170,8 @@ async def query_knowledge(request: QueryRequest):
             verification=result.get("verification", {}),
             trace=result.get("trace", {}),
             confidence=result.get("confidence", 0.0),
+            crag_decision=result.get("crag_decision", "unknown"),
+            auditor_verdict=result.get("auditor_verdict", "unknown"),
         )
     except Exception as e:
         logger.exception("Query failed elapsed_ms={:.1f}", (time.perf_counter() - start) * 1000)
@@ -146,6 +181,7 @@ async def query_knowledge(request: QueryRequest):
 async def query_knowledge_stream(request: QueryRequest):
     """流式问答 SSE 端点 - 逐 token 返回"""
     import json
+    from app.agents.orchestrator import stream_orchestrator
 
     def event_stream():
         start = time.perf_counter()
@@ -177,13 +213,14 @@ async def query_knowledge_stream(request: QueryRequest):
 
 @router.post("/vector/search")
 async def search_vector(request: VectorSearchRequest):
-    query_embedding = embedding_service.embed_query(request.query)
-    results = vector_store.search(query_embedding, request.top_k)
+    vs, es = _get_vector_store()
+    query_embedding = es.embed_query(request.query)
+    results = vs.search(query_embedding, request.top_k)
     return {"query": request.query, "results": results}
 
 @router.get("/graph/stats", response_model=GraphStatsResponse)
 async def get_graph_stats():
-    stats = kg_service.get_stats()
+    stats = _get_kg_service().get_stats()
     return GraphStatsResponse(
         total_nodes=stats.get("total_nodes", 0),
         total_relations=stats.get("total_relations", 0),
@@ -193,32 +230,35 @@ async def get_graph_stats():
 
 @router.get("/graph/entity/{entity_name}")
 async def get_entity_neighbors(entity_name: str, depth: int = 2):
-    return kg_service.search_neighbors(entity_name, depth)
+    return _get_kg_service().search_neighbors(entity_name, depth)
 
 @router.get("/graph/path")
 async def find_entity_paths(source: str, target: str, max_depth: int = 3):
-    paths = kg_service.find_paths(source, target, max_depth)
+    paths = _get_kg_service().find_paths(source, target, max_depth)
     return {"source": source, "target": target, "paths": paths}
 
 @router.get("/vector/stats")
 async def get_vector_stats():
-    return vector_store.get_stats()
+    vs, _ = _get_vector_store()
+    return vs.get_stats()
 
 @router.get("/graph")
 async def get_full_graph(limit: int = 500, type: str = "all"):
     """返回全量图谱数据（节点+关系），供前端力导向图使用"""
-    return kg_service.get_all_graph(limit=limit, entity_type=type)
+    return _get_kg_service().get_all_graph(limit=limit, entity_type=type)
 
 @router.get("/system/status")
 async def get_system_status():
+    vs, _ = _get_vector_store()
+    readiness_payload, observability_status = _get_readiness()
     readiness = readiness_payload()
     return {
         "status": "running",
         "llm_model": settings.LLM_MODEL,
         "embedding_model": settings.EMBEDDING_MODEL,
-        "vector_store": vector_store.get_stats(),
-        "bm25_store": bm25_store.get_stats(),
-        "graph_store": kg_service.get_stats(),
+        "vector_store": vs.get_stats(),
+        "bm25_store": _get_bm25_store().get_stats(),
+        "graph_store": _get_kg_service().get_stats(),
         "auth_enabled": settings.ENABLE_AUTH,
         "rate_limit_per_min": settings.RATE_LIMIT_PER_MIN,
         "readiness": readiness["status"],
