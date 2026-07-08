@@ -67,7 +67,7 @@ def test_query() -> bool:
     )
     # 未部署 LLM 时会返 500；鉴权失败会返 401/503
     print("   ->", r.status_code)
-    return r.status_code in (200, 500)
+    return r.status_code == 200
 
 
 def test_document_upload() -> bool:

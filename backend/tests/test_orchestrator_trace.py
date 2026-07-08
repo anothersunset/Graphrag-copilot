@@ -1,7 +1,7 @@
-from app.agents.orchestrator import MultiAgentOrchestrator
+from app.agents.orchestrator import LegacyOrchestrator
 
 def test_orchestrator_returns_trace(monkeypatch):
-    orchestrator = MultiAgentOrchestrator()
+    orchestrator = LegacyOrchestrator()
 
     monkeypatch.setattr(
         orchestrator.query_agent,

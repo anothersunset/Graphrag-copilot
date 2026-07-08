@@ -119,7 +119,7 @@ class BM25Store:
             for idx, score in ranked:
                 if idx < len(self.documents):
                     doc = self.documents[idx].copy()
-                    doc["score"] = float(score / max_score)
+                    doc["score"] = max(0.0, float(score / max_score))
                     results.append(doc)
 
         return results

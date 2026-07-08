@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd -m -r appuser
+RUN mkdir -p /app/data && chown appuser:appuser /app/data
 COPY --chown=appuser:appuser . .
 USER appuser
 EXPOSE 8000

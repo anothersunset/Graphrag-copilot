@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+*.pyo
+.env
+.pytest_cache
+.coverage
+htmlcov
+coverage.xml
+data/raw
+data/processed
+data/vector_db
+data/graph_db
+.git
