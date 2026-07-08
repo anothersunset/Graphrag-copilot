@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { API_BASE } from "@/lib/api";
 
 interface SystemStatus {
   status: string;
@@ -30,7 +31,7 @@ export default function StatusPage() {
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/api/system/status");
+      const response = await fetch(`${API_BASE}/api/system/status`);
       if (response.ok) {
         const data = await response.json();
         setStatus(data);

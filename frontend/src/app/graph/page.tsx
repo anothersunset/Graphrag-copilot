@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useMemo, useCallback, CSSProperties } from "react";
+import { API_BASE } from "@/lib/api";
 import ControlPanel from "./ControlPanel";
 import {
   GraphData,
@@ -22,8 +23,6 @@ export const TYPE_COLOR: Record<string, string> = {
   Document: "#9AA0A6",
   Event: "#F25C54",
 };
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
 //
 // === Layout styles ===

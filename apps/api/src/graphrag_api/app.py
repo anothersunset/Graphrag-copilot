@@ -32,7 +32,7 @@ class AskResponse(BaseModel):
 
 def _default_orchestrator():
     """Late-bound import so the package boots without graph dependencies."""
-    from graphrag_graph.app import build_graph  # type: ignore
+    from graphrag_graph import build_graph
 
     return build_graph()
 
@@ -56,6 +56,17 @@ def create_app() -> FastAPI:
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/readyz")
+    def readyz() -> dict[str, object]:
+        return {
+            "status": "ready",
+            "dependencies": {
+                "api": {"status": "ok"},
+                "retrieval": {"status": "not_configured"},
+                "observability": {"status": "not_configured"},
+            },
+        }
+
     @app.post("/v1/ask", response_model=AskResponse)
     async def ask(
         req: AskRequest,
@@ -71,7 +82,7 @@ def create_app() -> FastAPI:
         )
         return AskResponse(
             answer=state.get("answer", ""),
-            verdict=state.get("verdict", "unsupported"),
+            verdict=state.get("auditor_verdict") or state.get("verdict", "unsupported"),
             cited_chunk_ids=state.get("cited_chunk_ids") or [],
             audit=[a if isinstance(a, dict) else a.__dict__ for a in (state.get("audit") or [])],
             retrieval_trace=trace,

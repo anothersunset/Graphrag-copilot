@@ -10,7 +10,21 @@ from ..crag import CragScorer
 def evaluator_node(state: dict, *, config: dict | None = None) -> dict:
     """Score the current candidate set and emit a CRAG decision."""
     config = config or {}
-    scorer: CragScorer = config.get("crag_scorer") or CragScorer()
+    scorer: CragScorer | None = config.get("crag_scorer")
+    if scorer is None:
+        # Honor GraphConfig.crag thresholds + v3.2 knobs — previously they
+        # were passed into node config but never reached the default scorer.
+        thresholds = config.get("crag")
+        kwargs: dict = {
+            "spread_penalty": float(config.get("crag_spread_penalty", 0.0)),
+            "min_spread": float(config.get("crag_min_spread", 0.05)),
+            "judge_weight": float(config.get("crag_judge_weight", 0.5)),
+            "judge": config.get("crag_judge"),
+        }
+        if thresholds is not None:
+            kwargs["use_threshold"] = thresholds.use
+            kwargs["rewrite_threshold"] = thresholds.rewrite_low
+        scorer = CragScorer(**kwargs)
     hits = state.get("fused_hits") or state.get("hits") or []
     # state key is ``question`` (see state.py); ``query`` kept as a
     # backwards-compatible fallback in case a caller mutated state.

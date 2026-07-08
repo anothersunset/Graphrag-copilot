@@ -164,5 +164,11 @@ GraphRAG Copilot 默认允许本地匿名访问，便于快速试用；在生产
 - 前端 API 地址默认 `http://localhost:8000`，生产环境请使用 `NEXT_PUBLIC_API_BASE_URL` 覆盖。
 - 问答交互尚未支持多轮上下文会话，后续会接入会话存储与收发上下文压缩。
 
+## Operational probes
+- `/health` is the liveness probe and returns 200 when the API process is up.
+- `/readyz` is the readiness probe and returns dependency details for vector, BM25, graph, embedding, and observability state.
+- `test_api.py` is the local smoke runner. It checks liveness, readiness, system status, vector stats, graph stats, query, document upload, auth, and rate limiting.
+- Frontend API base URL resolution order is `NEXT_PUBLIC_API_BASE_URL`, then `NEXT_PUBLIC_API_URL`, then `NEXT_PUBLIC_API_BASE`, then `http://localhost:8000`.
+
 ## License
 MIT

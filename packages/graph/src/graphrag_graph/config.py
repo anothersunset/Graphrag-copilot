@@ -38,6 +38,15 @@ class GraphConfig:
     enable_web_search: bool = False
     auditor_strict: bool = False
 
+    # CRAG v3.2 knobs (0 == disabled → v3.1 behaviour). See crag.CragScorer.
+    crag_spread_penalty: float = 0.0
+    crag_min_spread: float = 0.05
+    crag_judge_weight: float = 0.5
+
+    # local/global routing (planner). When False the planner never emits
+    # the ``retrieve_kg_global`` community-report route.
+    enable_global_search: bool = True
+
     # LLM
     planner_model: str = "openai/gpt-4o-mini"
     generator_model: str = "openai/gpt-4o-mini"

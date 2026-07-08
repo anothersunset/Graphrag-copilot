@@ -1,5 +1,6 @@
 from app.agents.orchestrator import MultiAgentOrchestrator
 
+
 def test_orchestrator_returns_trace(monkeypatch):
     orchestrator = MultiAgentOrchestrator()
 
@@ -29,7 +30,19 @@ def test_orchestrator_returns_trace(monkeypatch):
         },
     )
 
-    result = orchestrator.process_query("什么是 GraphRAG？")
+    monkeypatch.setattr(
+        orchestrator.verification_agent,
+        "verify",
+        lambda query, answer, sources: {
+            "is_supported": False,
+            "hallucination_detected": False,
+            "confidence": 0.0,
+            "issues": [],
+            "source_mapping": {},
+        },
+    )
+
+    result = orchestrator.process_query("What is GraphRAG?")
 
     assert "trace" in result
     assert "analysis" in result["trace"]

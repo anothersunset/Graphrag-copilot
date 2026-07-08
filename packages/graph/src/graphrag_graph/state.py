@@ -101,6 +101,14 @@ class GraphState(TypedDict, total=False):
     # --- Auditor outputs ----------------------------------------------
     auditor_verdict: AuditorVerdict
     auditor_notes: list[str]
+    # v3.2: sentence-level claims + answer-level cited ids. These MUST be
+    # declared here — LangGraph silently drops node-returned keys that are
+    # not part of the state schema, which is exactly what broke /v1/ask.
+    cited_chunk_ids: list[str]
+    claims: list[dict[str, Any]]
+
+    # --- Retriever outputs (v3.2 EvidencePack) -------------------------
+    evidence_pack: dict[str, Any] | None
 
     # --- Cross-node ----------------------------------------------------
     tool_calls: Annotated[list[ToolCall], add]

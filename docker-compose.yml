@@ -28,6 +28,12 @@ services:
       - ./backend/.env:/app/.env
     depends_on:
       - neo4j
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     restart: unless-stopped
   frontend:
     build:
@@ -37,9 +43,11 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 volumes:
   neo4j_data:

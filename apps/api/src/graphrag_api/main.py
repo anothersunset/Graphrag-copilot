@@ -8,7 +8,7 @@ shell end-to-end.
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from graphrag_api import __version__
 from graphrag_api.config import settings
@@ -25,6 +25,7 @@ class HealthResponse(BaseModel):
     version: str
     env: str
     timestamp: str
+    dependencies: dict[str, object] = Field(default_factory=dict)
 
 
 @app.get("/healthz", response_model=HealthResponse, tags=["health"])
@@ -35,15 +36,23 @@ async def healthz() -> HealthResponse:
         version=__version__,
         env=settings.env,
         timestamp=datetime.now(UTC).isoformat(),
+        dependencies={},
     )
 
 
 @app.get("/readyz", response_model=HealthResponse, tags=["health"])
 async def readyz() -> HealthResponse:
     """Readiness probe. W3+: extends to check Qdrant/Neo4j connectivity."""
+    dependencies = {
+        "api": {"status": "ok"},
+        "qdrant": {"status": "not_configured"},
+        "neo4j": {"status": "not_configured"},
+        "langfuse": {"status": "not_configured"},
+    }
     return HealthResponse(
         status="ready",
         version=__version__,
         env=settings.env,
         timestamp=datetime.now(UTC).isoformat(),
+        dependencies=dependencies,
     )

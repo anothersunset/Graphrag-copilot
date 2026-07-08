@@ -37,7 +37,8 @@ def _register_tool(mcp: Any, spec: ToolSpec, *, orchestrator: Any) -> None:
         if name.startswith("search."):
             return {"hits": _stub_hits(query=kwargs.get("query", ""), source=name.split(".", 1)[1])}
         if name == "orchestrate.ask" and orchestrator is not None:
-            return orchestrator.invoke({"query": kwargs.get("query", "")})
+            # GraphState keys the question as ``question`` (state.py).
+            return orchestrator.invoke({"question": kwargs.get("query", "")})
         return {"answer": "stub", "audit": [], "retrieval_trace": [], "tool_calls": []}
 
     _handler.__name__ = name.replace(".", "_")

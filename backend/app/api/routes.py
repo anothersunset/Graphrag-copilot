@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 from uuid import uuid4
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
@@ -19,6 +20,7 @@ from app.services.kg_service import kg_service
 from app.services.document_parser import doc_parser
 from app.services.llm_service import llm_service
 from app.agents.orchestrator import orchestrator, stream_orchestrator
+from app.core.readiness import observability_status, readiness_payload
 from config.settings import settings
 
 router = APIRouter()
@@ -46,6 +48,7 @@ def _extract_entities_background(file_name: str, full_text: str):
 
 @router.post("/documents/upload", response_model=DocumentResponse, dependencies=[Depends(require_api_key)])
 async def upload_document(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
+    start = time.perf_counter()
     validate_upload_file(file)
 
     content = await file.read()
@@ -96,6 +99,13 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
         raise HTTPException(status_code=500, detail="Indexing failed: " + str(e))
 
     background_tasks.add_task(_extract_entities_background, file.filename, full_text)
+    logger.info(
+        "document upload indexed file={} bytes={} chunks={} elapsed_ms={:.1f}",
+        file.filename,
+        len(content),
+        len(chunks),
+        (time.perf_counter() - start) * 1000,
+    )
 
     return DocumentResponse(
         file_name=file.filename,
@@ -109,8 +119,16 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
 
 @router.post("/query", response_model=QueryResponse, dependencies=[Depends(require_api_key)])
 async def query_knowledge(request: QueryRequest):
+    start = time.perf_counter()
     try:
         result = orchestrator.process_query(request.query, top_k=request.top_k)
+        logger.info(
+            "query completed top_k={} sources={} confidence={:.3f} elapsed_ms={:.1f}",
+            request.top_k,
+            len(result.get("sources", [])),
+            float(result.get("confidence", 0.0) or 0.0),
+            (time.perf_counter() - start) * 1000,
+        )
         return QueryResponse(
             query=result["query"],
             answer=result["answer"],
@@ -121,7 +139,7 @@ async def query_knowledge(request: QueryRequest):
             confidence=result.get("confidence", 0.0),
         )
     except Exception as e:
-        logger.exception("Query failed")
+        logger.exception("Query failed elapsed_ms={:.1f}", (time.perf_counter() - start) * 1000)
         raise HTTPException(status_code=500, detail="Query failed: " + str(e))
 
 @router.post("/query/stream", dependencies=[Depends(require_api_key)])
@@ -130,12 +148,21 @@ async def query_knowledge_stream(request: QueryRequest):
     import json
 
     def event_stream():
+        start = time.perf_counter()
         try:
+            event_count = 0
             for event in stream_orchestrator.process_query_stream(request.query, top_k=request.top_k):
+                event_count += 1
                 event_type = event.get("type", "message")
                 yield f"event: {event_type}\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+            logger.info(
+                "stream query completed top_k={} events={} elapsed_ms={:.1f}",
+                request.top_k,
+                event_count,
+                (time.perf_counter() - start) * 1000,
+            )
         except Exception as e:
-            logger.exception("Stream query failed")
+            logger.exception("Stream query failed elapsed_ms={:.1f}", (time.perf_counter() - start) * 1000)
             yield f"event: error\ndata: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
@@ -184,6 +211,7 @@ async def get_full_graph(limit: int = 500, type: str = "all"):
 
 @router.get("/system/status")
 async def get_system_status():
+    readiness = readiness_payload()
     return {
         "status": "running",
         "llm_model": settings.LLM_MODEL,
@@ -193,4 +221,7 @@ async def get_system_status():
         "graph_store": kg_service.get_stats(),
         "auth_enabled": settings.ENABLE_AUTH,
         "rate_limit_per_min": settings.RATE_LIMIT_PER_MIN,
+        "readiness": readiness["status"],
+        "dependencies": readiness["dependencies"],
+        "observability": observability_status(),
     }

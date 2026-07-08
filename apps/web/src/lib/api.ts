@@ -24,10 +24,15 @@ export interface RunResponse {
   tool_calls: Array<{ name: string; arguments: Record<string, unknown> }>
 }
 
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  process.env.NEXT_PUBLIC_API_BASE ??
+  "http://localhost:8000"
+
 export async function fetchRun(id: string): Promise<RunResponse | null> {
-  const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000"
   try {
-    const r = await fetch(`${base}/v1/runs/${encodeURIComponent(id)}`, {
+    const r = await fetch(`${API_BASE}/v1/runs/${encodeURIComponent(id)}`, {
       cache: "no-store",
     })
     if (!r.ok) return null
@@ -38,8 +43,7 @@ export async function fetchRun(id: string): Promise<RunResponse | null> {
 }
 
 export async function ask(query: string): Promise<RunResponse> {
-  const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000"
-  const r = await fetch(`${base}/v1/ask`, {
+  const r = await fetch(`${API_BASE}/v1/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query }),

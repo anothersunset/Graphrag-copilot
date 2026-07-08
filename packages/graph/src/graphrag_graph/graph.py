@@ -38,6 +38,7 @@ def build_graph(
     auditor_client: Any = None,
     crag_scorer: Any = None,
     query_rewriter: Any = None,
+    planner_client: Any = None,
 ):
     """Build and compile the 7-node Agentic RAG graph.
 
@@ -54,7 +55,11 @@ def build_graph(
         "top_k_after_rerank": cfg.top_k_after_rerank,
         "enable_kg": cfg.enable_kg,
         "enable_web_search": cfg.enable_web_search,
+        "enable_global_search": cfg.enable_global_search,
         "auditor_strict": cfg.auditor_strict,
+        "crag_spread_penalty": cfg.crag_spread_penalty,
+        "crag_min_spread": cfg.crag_min_spread,
+        "crag_judge_weight": cfg.crag_judge_weight,
         "planner_model": cfg.planner_model,
         "generator_model": cfg.generator_model,
         "auditor_model": cfg.auditor_model,
@@ -66,6 +71,7 @@ def build_graph(
         "dspy_auditor": auditor_client,
         "crag_scorer": crag_scorer,
         "query_rewriter": query_rewriter,
+        "planner_client": planner_client,
     }
 
     # NOTE: We use closures instead of ``functools.partial(node, config=node_cfg)``

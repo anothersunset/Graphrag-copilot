@@ -71,10 +71,10 @@ apps/web/
 ```
 packages/
 ├── schemas/         src/graphrag_schemas/      EvidencePack / TraceRow / RetrievalResult / Claim / ProvenanceReport
-├── retrieval/       src/graphrag_retrieval/    vector_retriever / bm25_retriever / kg_retriever / web_retriever / bge_reranker
+├── retrieval/       src/graphrag_retrieval/    vector / bm25 / kg(多跳) / community(global) / web / bge_reranker
 ├── parsers/         src/graphrag_parsers/      semantic_splitter / markdown_aware / late_chunking
-├── kg/              src/graphrag_kg/           neo4j_client / entity_extractor / three_hop_subgraph
-├── graph/           src/graphrag_graph/        nodes/ (7 LangGraph 节点) · evidence.py · claims.py · provenance.py · adversarial.py
+├── kg/              src/graphrag_kg/           extraction(gleaning) / resolution(消歧) / graph_store(networkx) / community(Louvain) / pagerank(PPR/HippoRAG) / pipeline(一键索引)
+├── graph/           src/graphrag_graph/        nodes/ (7 LangGraph 节点 + local/global 路由) · evidence.py · claims.py · provenance.py · adversarial.py
 ├── observability/   src/graphrag_observability/ langfuse_client / audit_writer / trace_decorators
 └── eval/            src/graphrag_eval/         metrics/ · ragas_adapter / deepeval_adapter / bench/ (v3.2 端到端基准)
 ```

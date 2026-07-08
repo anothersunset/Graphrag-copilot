@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { API_BASE } from "@/lib/api";
 
 interface Message {
   id: string;
@@ -49,7 +50,7 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/api/query/stream", {
+      const response = await fetch(`${API_BASE}/api/query/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: input, top_k: 5 }),

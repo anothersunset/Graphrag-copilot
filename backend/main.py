@@ -1,14 +1,18 @@
 """GraphRAG Copilot - FastAPI 主入口"""
 import sys
+import time
+from uuid import uuid4
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 
 from config.settings import settings
 from app.core.logger import logger
+from app.core.readiness import readiness_payload
 
 # ---- Rate limiter (slowapi) ----
 try:
@@ -23,11 +27,47 @@ except ImportError:
     _SLOWAPI_AVAILABLE = False
     logger.warning("slowapi 未安装，限流被跳过")
 
+def _rate_limit_per_min() -> int:
+    try:
+        return max(0, int(settings.RATE_LIMIT_PER_MIN))
+    except Exception:
+        return 60
+
+
 if _SLOWAPI_AVAILABLE:
-    default_limit = str(max(0, settings.RATE_LIMIT_PER_MIN)) + "/minute"
+    default_limit = str(_rate_limit_per_min()) + "/minute"
     limiter = Limiter(key_func=get_remote_address, default_limits=[default_limit])
 else:
     limiter = None
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or uuid4().hex
+        start = time.perf_counter()
+        bound_logger = logger.bind(request_id=request_id)
+        try:
+            response = await call_next(request)
+        except Exception:
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            bound_logger.exception(
+                "request failed method={} path={} latency_ms={:.1f}",
+                request.method,
+                request.url.path,
+                elapsed_ms,
+            )
+            raise
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        response.headers["X-Request-ID"] = request_id
+        bound_logger.info(
+            "request completed method={} path={} status={} latency_ms={:.1f}",
+            request.method,
+            request.url.path,
+            response.status_code,
+            elapsed_ms,
+        )
+        return response
 
 
 @asynccontextmanager
@@ -59,6 +99,8 @@ if _SLOWAPI_AVAILABLE and limiter is not None:
     # 关键：默认限流仅在挂上 SlowAPIMiddleware 后才生效
     app.add_middleware(SlowAPIMiddleware)
 
+app.add_middleware(RequestIdMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -76,6 +118,11 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+@app.get("/readyz")
+async def readiness_check():
+    return readiness_payload()
 
 
 from app.api.routes import router as api_router

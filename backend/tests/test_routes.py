@@ -99,6 +99,21 @@ class TestAPIRoutes:
         client = TestClient(app)
         response = client.get("/health")
         assert response.status_code == 200
+        assert response.headers.get("X-Request-ID")
+
+    def test_readyz_reports_dependencies(self):
+        from fastapi.testclient import TestClient
+        from main import app
+        client = TestClient(app)
+        response = client.get("/readyz")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] in {"ready", "degraded", "error"}
+        assert "dependencies" in data
+        assert "vector_store" in data["dependencies"]
+        assert "bm25_store" in data["dependencies"]
+        assert "graph_store" in data["dependencies"]
+        assert "observability" in data
 
     def test_system_status(self):
         """系统状态端点应返回运行信息。"""
@@ -109,6 +124,9 @@ class TestAPIRoutes:
         assert response.status_code == 200
         data = response.json()
         assert "status" in data
+        assert "readiness" in data
+        assert "dependencies" in data
+        assert "observability" in data
 
     def test_vector_stats(self):
         """向量统计端点应返回统计信息。"""

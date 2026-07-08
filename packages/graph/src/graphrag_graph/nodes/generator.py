@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from .._utils import digest, now_iso
 from ..state import Citation, GraphState
 
 logger = logging.getLogger(__name__)
+
+_CHUNK_MARKER = re.compile(r"\[chunk:(\d+)\]")
 
 
 SYSTEM_PROMPT = (
@@ -57,13 +60,21 @@ def generator_node(state: GraphState, config: dict[str, Any] | None = None) -> d
             # Instructor structured output — expect .answer field
             answer = getattr(result, "answer", str(result))
 
+    # Prefer the chunks the LLM actually cited via [chunk:N] markers;
+    # fall back to "everything fused" only when no markers are present
+    # (e.g. skeleton mode) so the auditor still has candidates to check.
+    cited_indices = {int(m) - 1 for m in _CHUNK_MARKER.findall(answer)}
+    cited_hits = [(i, h) for i, h in enumerate(fused) if i in cited_indices]
+    if not cited_hits:
+        cited_hits = list(enumerate(fused))
+
     citations: list[Citation] = [
         {
             "chunk_id": str(h.get("chunk_id") or i + 1),
             "span": (h.get("content") or "")[:120],
             "confidence": float(h.get("rerank_score") or h.get("score", 0.0)),
         }
-        for i, h in enumerate(fused)
+        for i, h in cited_hits
     ]
 
     audit = {

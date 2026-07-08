@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { API_BASE } from "@/lib/api";
 
 export default function UploadPage() {
   const [files, setFiles] = useState<File[]>([]);
@@ -38,7 +39,7 @@ export default function UploadPage() {
       formData.append("file", file);
 
       try {
-        const response = await fetch("http://localhost:8000/api/documents/upload", {
+        const response = await fetch(`${API_BASE}/api/documents/upload`, {
           method: "POST",
           body: formData,
         });

@@ -17,12 +17,17 @@ from .base import RetrievalHit
 
 logger = logging.getLogger(__name__)
 
+# NOTE: Cypher does NOT allow parameters in variable-length bounds —
+# ``[*1..$max_depth]`` is a SyntaxError against a real Neo4j server (the
+# old version of this query died on first contact and the exception
+# handler silently turned the whole KG route into []). The bound is
+# therefore interpolated as a validated literal int at init time.
 DEFAULT_CYPHER = """
 MATCH (e:Entity)
 WHERE toLower(e.name) IN $names
 CALL {
     WITH e
-    MATCH p = (e)-[*1..$max_depth]-(n)
+    MATCH p = (e)-[*1..{max_depth}]-(n)
     RETURN p AS path, length(p) AS depth
     ORDER BY depth ASC
     LIMIT $branch_limit
@@ -30,6 +35,10 @@ CALL {
 RETURN path, depth
 LIMIT $limit
 """
+
+# Score decay per extra hop: a 1-hop neighbour is stronger evidence than
+# a 3-hop chain reached through the same seed.
+DEPTH_DECAY = 0.8
 
 
 class KGRetriever:
@@ -53,9 +62,12 @@ class KGRetriever:
         self.auth = auth
         self.database = database
         self.ner = ner
-        self.cypher = cypher
+        self.max_depth = max(1, min(int(max_depth), 4))
+        # Inline the var-length bound (parameters are illegal there).
+        self.cypher = cypher.replace("{max_depth}", str(self.max_depth)).replace(
+            "$max_depth", str(self.max_depth)
+        )
         self._driver = driver
-        self.max_depth = max_depth
         self.branch_limit = branch_limit
 
     @property
@@ -93,7 +105,6 @@ class KGRetriever:
                     session.run(
                         self.cypher,
                         names=names,
-                        max_depth=self.max_depth,
                         branch_limit=self.branch_limit,
                         limit=top_k * 4,
                     )
@@ -113,17 +124,22 @@ class KGRetriever:
             for n in path_dict["nodes"]:
                 visited.add(n["id"])
             rendered = _render_path(path_dict)
+            # Rank prior × per-hop decay: same-rank shorter paths outrank
+            # longer chains (weights would refine this further, but path
+            # relationship weights aren't guaranteed to exist in Neo4j).
+            score = (1.0 / (i + 1)) * (DEPTH_DECAY ** max(depth - 1, 0))
             hits.append(
                 {
                     "chunk_id": f"kg:{path_dict['nodes'][0]['id']}->...->{path_dict['nodes'][-1]['id']}@d{depth}",
                     "source": "kg",
-                    "score": 1.0 / (i + 1),
+                    "score": round(score, 6),
                     "content": rendered,
                     "metadata": {"depth": depth, "relation": path_dict["rels"][0]["type"] if path_dict["rels"] else ""},
                     "path": path_dict,
                     "visited_node_ids": [n["id"] for n in path_dict["nodes"]],
                 }
             )
+        hits.sort(key=lambda h: -h["score"])
 
         # broadcast the full visited set onto the top hit so the
         # caller can aggregate per-query visited_nodes for EvidencePack.
