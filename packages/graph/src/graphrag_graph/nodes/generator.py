@@ -96,26 +96,17 @@ def generator_node(state: GraphState, config: dict[str, Any] | None = None) -> d
 
     # ── 后验检查：短答案无引用时强制拒答，长答案仅警告 ──
     if not _is_refusal(answer) and not _has_citations(answer):
-        if len(answer) < 50:
-            logger.warning(
-                "generator: short answer without citations, forcing refusal. answer=%s",
-                answer[:200],
-            )
-            answer = REFUSAL_ANSWER
-        else:
-            logger.warning(
-                "generator: answer has no [chunk:N] citations (kept). answer=%s",
-                answer[:200],
-            )
+        logger.warning(
+            "generator: answer without citations, forcing refusal. answer=%s",
+            answer[:200],
+        )
+        answer = REFUSAL_ANSWER
 
     # Prefer the chunks the LLM actually cited via [chunk:N] markers;
     # fall back to "everything fused" only when no markers are present
     # (e.g. skeleton mode) so the auditor still has candidates to check.
     cited_indices = {int(m) - 1 for m in _CHUNK_MARKER.findall(answer)}
     cited_hits = [(i, h) for i, h in enumerate(fused) if i in cited_indices]
-    if not cited_hits:
-        cited_hits = list(enumerate(fused))
-
     citations: list[Citation] = [
         {
             "chunk_id": str(h.get("chunk_id") or i + 1),

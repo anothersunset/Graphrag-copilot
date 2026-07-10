@@ -30,10 +30,10 @@ def test_citations_restricted_to_cited_markers():
     assert cited == {"a", "c"}  # chunk 2 (b) not cited
 
 
-def test_skeleton_mode_cites_all_when_no_markers():
+def test_skeleton_mode_does_not_invent_citations():
     out = generator_node({"question": "q", "fused_hits": _fused()}, {})
     # skeleton answer has no [chunk:N] markers → fall back to all fused
-    assert len(out["citations"]) == 3
+    assert out["citations"] == []
 
 
 def test_fallback_answers_in_chinese_for_cjk_question():

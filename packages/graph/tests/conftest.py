@@ -142,7 +142,7 @@ def fake_reranker():
 
 @pytest.fixture
 def fake_llm():
-    return FakeLLM(answer="GraphRAG fuses vector and KG signals.")
+    return FakeLLM(answer="GraphRAG fuses vector and KG signals [chunk:1].")
 
 
 @pytest.fixture

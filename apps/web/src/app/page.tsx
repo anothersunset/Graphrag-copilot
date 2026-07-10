@@ -52,18 +52,10 @@ export default function HomePage() {
           tokens.push(event.text)
           setAnswer(tokens.join(""))
         } else if (event.type === "done") {
-          const data = event.data as Record<string, unknown>
-          setRunData({
-            answer: tokens.join(""),
-            audit: [],
-            retrieval_trace: [],
-            tool_calls: [],
-            sources: (data?.sources as RunResponse["sources"]) ?? [],
-            confidence: (data?.confidence as number) ?? 0,
-            crag_decision: "unknown",
-            auditor_verdict: "unknown",
-            query,
-          })
+          if (event.data) {
+            setRunData(event.data)
+            setAnswer(event.data.answer)
+          }
         }
       })
     } catch (err) {
@@ -116,7 +108,7 @@ export default function HomePage() {
             <div className="mb-4 flex items-center gap-4 text-xs text-muted-foreground">
               <span>置信度: {(runData.confidence * 100).toFixed(0)}%</span>
               <span>CRAG: {runData.crag_decision}</span>
-              <span>Auditor: {runData.auditor_verdict}</span>
+              <span>Auditor: {runData.verdict}</span>
               <button
                 type="button"
                 onClick={() => setShowTrace(!showTrace)}

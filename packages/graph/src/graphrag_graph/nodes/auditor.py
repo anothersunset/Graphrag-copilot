@@ -60,13 +60,20 @@ def auditor_node(state: dict, *, config: dict | None = None) -> dict:
             # fall through to heuristic
             pass
 
+    valid_ids = {str(chunk_id) for chunk_id in chunk_ids if chunk_id}
+    cited = [str(chunk_id) for chunk_id in cited if str(chunk_id) in valid_ids]
     if not cited:
-        # Heuristic fallback: count chunk_ids that literally appear in the answer.
-        cited = [cid for cid in chunk_ids if cid and cid in answer]
-        if not cited and fused:
-            cited = chunk_ids[:3]
-        raw_verdict = "pass" if cited else "unsupported"
-        rationale = rationale or "heuristic auditor: cited chunks present in answer"
+        generated = state.get("citations") or []
+        cited = [
+            str(item.get("chunk_id"))
+            for item in generated
+            if item.get("chunk_id") and str(item.get("chunk_id")) in valid_ids
+        ]
+    if not cited:
+        cited = [chunk_id for chunk_id in valid_ids if chunk_id in answer]
+    if not cited:
+        raw_verdict = "unsupported"
+        rationale = rationale or "heuristic auditor: no valid evidence citation"
 
     if not claims:
         claims = heuristic_claims(
@@ -77,6 +84,8 @@ def auditor_node(state: dict, *, config: dict | None = None) -> dict:
 
     verdict = _coerce_verdict(raw_verdict)
     unsupported = sum(1 for c in claims if not c.is_supported())
+    if not cited or unsupported:
+        verdict = "fail"
     audit = {
         "node": "auditor",
         "decision": verdict,
