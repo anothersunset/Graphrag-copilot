@@ -19,6 +19,7 @@ def test_rewrite_loop_stops_at_cap():
                     "source": "vector",
                     "score": 0.5,
                     "content": "x",
+                    "metadata": {},
                 }
             ],
         )

@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import pytest
-from graphrag_graph.crag import CragResult
+from graphrag_graph.crag import CragDecision, CragResult
 from graphrag_graph.state import Citation, RetrievalHit
 
 
@@ -68,11 +68,12 @@ class FakeCragScorer:
     (>=0.7 use, >=0.3 rewrite, else fallback).
     """
 
-    def __init__(self, score: float, decision: str | None = None):
+    def __init__(self, score: float, decision: CragDecision | None = None):
         self.score_value = score
-        self._decision = decision
+        self._decision: CragDecision | None = decision
 
     def score(self, query: str, hits: Sequence[RetrievalHit]) -> CragResult:
+        decision: CragDecision
         if self._decision is not None:
             decision = self._decision
         elif self.score_value >= 0.7:

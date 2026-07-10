@@ -105,7 +105,10 @@ class BM25Retriever:
             self.build()
 
         tokens = _tokenize_zh(query)
-        scores = self._bm25.get_scores(tokens)
+        bm25 = self._bm25
+        if bm25 is None:  # defensive: build() above must initialise it
+            return []
+        scores = bm25.get_scores(tokens)
 
         # argsort descending; cheap for small corpora, swap to heapq.nlargest at scale
         ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]

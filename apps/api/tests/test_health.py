@@ -28,4 +28,4 @@ def test_openapi_exposes_canonical_business_routes() -> None:
 
 def test_mcp_is_mounted_once() -> None:
     app = create_app()
-    assert [route.name for route in app.routes].count("mcp") == 1
+    assert [getattr(route, "name", None) for route in app.routes].count("mcp") == 1

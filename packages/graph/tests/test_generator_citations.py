@@ -5,13 +5,14 @@ from __future__ import annotations
 from graphrag_graph.nodes.fallback import fallback_node
 from graphrag_graph.nodes.generator import generator_node
 from graphrag_graph.nodes.rewriter import rewriter_node
+from graphrag_graph.state import RetrievalHit
 
 
-def _fused():
+def _fused() -> list[RetrievalHit]:
     return [
-        {"chunk_id": "a", "source": "vector", "score": 0.9, "content": "alpha"},
-        {"chunk_id": "b", "source": "vector", "score": 0.8, "content": "beta"},
-        {"chunk_id": "c", "source": "bm25", "score": 0.7, "content": "gamma"},
+        {"chunk_id": "a", "source": "vector", "score": 0.9, "content": "alpha", "metadata": {}},
+        {"chunk_id": "b", "source": "vector", "score": 0.8, "content": "beta", "metadata": {}},
+        {"chunk_id": "c", "source": "bm25", "score": 0.7, "content": "gamma", "metadata": {}},
     ]
 
 

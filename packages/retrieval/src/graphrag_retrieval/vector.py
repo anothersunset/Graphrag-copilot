@@ -50,7 +50,7 @@ class VectorRetriever:
         if self._client is None:
             from qdrant_client import QdrantClient
 
-            self._client = QdrantClient(url=self.url, timeout=self.timeout_s)
+            self._client = QdrantClient(url=self.url, timeout=max(1, int(self.timeout_s)))
         return self._client
 
     def _embed(self, text: str) -> list[float]:

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 CragDecision = Literal["use", "rewrite", "fallback"]
 Scorer = Callable[[str, Sequence[str]], list[float]]
@@ -84,7 +84,7 @@ class CragScorer:
         self._judge = judge
         self.judge_weight = judge_weight
 
-    def score(self, query: str, hits: Sequence[dict]) -> CragResult:
+    def score(self, query: str, hits: Sequence[dict[str, Any]]) -> CragResult:
         top = list(hits)[: self.top_k]
         if not top:
             return CragResult(
@@ -101,21 +101,21 @@ class CragScorer:
             relevance = sum(raw) / len(raw) if raw else 0.0
         else:
             rerank_scores = [
-                h.get("rerank_score") for h in top if h.get("rerank_score") is not None
+                float(h.get("rerank_score") or 0.0)
+                for h in top
+                if h.get("rerank_score") is not None
             ]
             if rerank_scores:
                 relevance = sum(rerank_scores) / len(rerank_scores)
             else:
-                raw_scores = [float(h.get("score", 0.0)) for h in top]
+                raw_scores = [float(h.get("score", 0.0) or 0.0) for h in top]
                 relevance = sum(raw_scores) / len(raw_scores) if raw_scores else 0.0
 
         # Coverage: fraction of hits whose effective score >= coverage_floor.
-        effective = [
-            float(
-                h.get("rerank_score") if h.get("rerank_score") is not None else h.get("score", 0.0)
-            )
-            for h in top
-        ]
+        effective = []
+        for hit in top:
+            rerank_score = hit.get("rerank_score")
+            effective.append(float(rerank_score if rerank_score is not None else hit.get("score", 0.0) or 0.0))
         coverage = sum(1 for s in effective if s >= self.coverage_floor) / len(effective)
 
         raw_final = self.alpha * relevance + (1.0 - self.alpha) * coverage

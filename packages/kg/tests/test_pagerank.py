@@ -62,7 +62,7 @@ async def test_ppr_retriever_ranks_seed_chunk_first():
     idx = _chain_index()
     chunk_texts = {"c1": "AlphaSys connects through Bridge.", "c2": "CoreDB stores data.",
                    "c3": "Islands are unrelated."}
-    retriever = PPRRetriever(idx, chunk_lookup=chunk_texts.get)
+    retriever = PPRRetriever(idx, chunk_lookup=lambda chunk_id: chunk_texts.get(chunk_id, ""))
     hits = await retriever.aretrieve("How does AlphaSys work?", top_k=3)
 
     assert hits, "expected chunk hits"

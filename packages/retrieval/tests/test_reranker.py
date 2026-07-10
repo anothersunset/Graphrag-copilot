@@ -18,7 +18,7 @@ def test_rerank_reorders_by_injected_scores():
     reranker = BGEReranker(scorer=fake_scorer)
     top = reranker.rerank("q", hits, top_k=3)
     assert [h["chunk_id"] for h in top] == ["c", "a", "b"]
-    assert top[0]["rerank_score"] == 0.95
+    assert top[0].get("rerank_score") == 0.95
 
 
 def test_rerank_topk_truncation():

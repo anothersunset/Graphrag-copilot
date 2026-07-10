@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from graphrag_graph.nodes.retriever import retriever_node
+from graphrag_graph.state import GraphState
 
 
 class SyncRetriever:
@@ -32,7 +33,7 @@ class BrokenRetriever:
         raise RuntimeError("boom")
 
 
-def _state(tools):
+def _state(tools: list[str]) -> GraphState:
     return {"question": "how does GraphRAG use Neo4j?", "tools_to_call": tools}
 
 

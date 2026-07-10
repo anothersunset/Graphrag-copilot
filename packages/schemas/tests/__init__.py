@@ -1,1 +1,0 @@
-"""graphrag-schemas test suite."""

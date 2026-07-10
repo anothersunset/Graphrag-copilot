@@ -46,6 +46,11 @@ _SUMMARY_SYSTEM = (
 PartitionFn = Callable[[nx.Graph], list[set[str]]]
 
 
+def _weighted_degree(graph: nx.Graph, node: str) -> float:
+    """Return weighted degree without relying on NetworkX's ambiguous overloads."""
+    return sum(float(data.get("weight", 1.0)) for _, _, data in graph.edges(node, data=True))
+
+
 def detect_communities(
     index: KnowledgeGraphIndex,
     *,
@@ -63,7 +68,7 @@ def detect_communities(
         lambda graph: nx.community.louvain_communities(graph, weight="weight", seed=seed)
     )
 
-    total_degree = sum(d for _, d in g.degree(weight="weight")) or 1.0
+    total_degree = sum(_weighted_degree(g, str(node)) for node in g.nodes) or 1.0
     reports: list[CommunityReport] = []
 
     level0 = partition(g)
@@ -97,7 +102,7 @@ def _skeleton(
     for n in members:
         for c in index.chunk_ids_for(n):
             chunk_ids.setdefault(c, None)
-    degree = sum(d for _, d in g.degree(members, weight="weight"))
+    degree = sum(_weighted_degree(g, member) for member in members)
     return CommunityReport(
         community_id=community_id,
         level=level,
@@ -127,9 +132,10 @@ class CommunitySummarizer:
     ) -> list[CommunityReport]:
         for report in reports:
             context = self._community_context(index, report)
-            if self._llm is not None:
+            llm = self._llm
+            if llm is not None:
                 try:
-                    raw = self._llm(_SUMMARY_SYSTEM, context).strip()
+                    raw = llm(_SUMMARY_SYSTEM, context).strip()
                     title, _, body = raw.partition("\n")
                     report.title = title.strip()[:60]
                     report.summary = body.strip() or raw
@@ -161,7 +167,7 @@ class CommunitySummarizer:
         g = index.graph
         by_degree = sorted(
             report.entity_ids,
-            key=lambda n: -g.degree(n, weight="weight"),
+            key=lambda n: -_weighted_degree(g, n),
         )
         top = by_degree[:3]
         title = " / ".join(top)[:60]

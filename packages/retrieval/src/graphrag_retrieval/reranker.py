@@ -11,9 +11,10 @@ function without loading the actual 568M-parameter model.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
-from .base import RetrievalHit
+from .base import RetrievalHit, _normalise_hit
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class BGEReranker:
     def rerank(
         self,
         query: str,
-        hits: Sequence[RetrievalHit],
+        hits: Sequence[Mapping[str, Any]],
         *,
         top_k: int,
     ) -> list[RetrievalHit]:
@@ -80,11 +81,11 @@ class BGEReranker:
             scores = self._score(query, contents)
         except Exception:
             logger.exception("rerank failed; returning input slice")
-            return list(hits)[:top_k]
+            return [_normalise_hit(hit) for hit in hits[:top_k]]
 
         scored: list[RetrievalHit] = []
         for hit, s in zip(hits, scores):
-            h = dict(hit)
+            h = _normalise_hit(hit)
             h["rerank_score"] = float(s)
             scored.append(h)
         scored.sort(key=lambda h: h.get("rerank_score") or 0.0, reverse=True)

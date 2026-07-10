@@ -35,8 +35,10 @@ def test_multi_hop_path_round_trips_into_hit():
     assert len(hits) == 2
     assert hits[0]["source"] == "kg"
     # path payload preserved
-    assert hits[0]["path"]["depth"] == 2
-    assert [n["id"] for n in hits[0]["path"]["nodes"]] == ["GraphRAG", "Neo4j", "Cypher"]
+    path = hits[0].get("path")
+    assert path is not None
+    assert path["depth"] == 2
+    assert [n["id"] for n in path["nodes"]] == ["GraphRAG", "Neo4j", "Cypher"]
     # rendered content reflects the chain
     assert "GraphRAG" in hits[0]["content"]
     assert "→ Cypher" in hits[0]["content"]
@@ -46,18 +48,20 @@ def test_visited_node_ids_aggregate_across_paths():
     retriever = KGRetriever.from_paths([PATH_2HOP, PATH_1HOP])
     hits = asyncio.run(retriever.aretrieve("q", top_k=5))
     # top hit broadcasts the union of all visited node ids
-    visited = set(hits[0]["visited_node_ids"])
+    visited = set(hits[0].get("visited_node_ids", []))
     assert visited == {"GraphRAG", "Neo4j", "Cypher", "BM25"}
 
 
 def test_explicit_visited_override():
     retriever = KGRetriever.from_paths([PATH_1HOP], visited=["GraphRAG", "BM25", "DistractorNode"])
     hits = asyncio.run(retriever.aretrieve("q", top_k=5))
-    assert "DistractorNode" in hits[0]["visited_node_ids"]
+    assert "DistractorNode" in hits[0].get("visited_node_ids", [])
 
 
 def test_legacy_from_triples_still_works():
     retriever = KGRetriever.from_triples([("A", "REL", "B")])
     hits = asyncio.run(retriever.aretrieve("q", top_k=5))
-    assert hits[0]["path"]["depth"] == 1
-    assert hits[0]["path"]["rels"][0]["type"] == "REL"
+    path = hits[0].get("path")
+    assert path is not None
+    assert path["depth"] == 1
+    assert path["rels"][0]["type"] == "REL"

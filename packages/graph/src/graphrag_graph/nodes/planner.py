@@ -83,7 +83,7 @@ def _heuristic_plan(question: str, enable_kg: bool) -> dict:
         "factual": factual_score,
         "crossdoc": crossdoc_score,
     }
-    best = max(scores, key=scores.get)
+    best = max(scores, key=lambda key: scores[key])
     best_score = scores[best]
 
     if best_score == 0:

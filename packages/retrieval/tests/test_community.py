@@ -48,7 +48,7 @@ def test_ranks_relevant_community_first():
     assert hits[0]["source"] == "kg"
     # provenance back to member chunks + entities is preserved
     assert hits[0]["metadata"]["member_chunk_ids"] == ["c1", "c2"]
-    assert "GraphRAG" in hits[0]["visited_node_ids"]
+    assert "GraphRAG" in hits[0].get("visited_node_ids", [])
 
 
 def test_prefer_level_filters_out_sub_communities():

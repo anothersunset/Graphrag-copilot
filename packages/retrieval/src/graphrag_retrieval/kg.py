@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from .base import RetrievalHit
 
@@ -103,7 +103,7 @@ class KGRetriever:
             with self.driver.session(database=self.database) as session:
                 records = list(
                     session.run(
-                        self.cypher,
+                        cast(Any, self.cypher),
                         names=names,
                         branch_limit=self.branch_limit,
                         limit=top_k * 4,

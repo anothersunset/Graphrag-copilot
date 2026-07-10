@@ -1,1 +1,0 @@
-"""graphrag-observability test suite."""

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class RetrieverKind(str, Enum):
+class RetrieverKind(StrEnum):
     """Supported retriever backends."""
 
     VECTOR = "vector"
@@ -20,7 +20,7 @@ class RetrieverKind(str, Enum):
     WEB = "web"
 
 
-class ToolKind(str, Enum):
+class ToolKind(StrEnum):
     """Categories of tool invocations."""
 
     RETRIEVAL = "retrieval"
@@ -66,7 +66,7 @@ class RetrievalTrace(BaseModel):
         return [s for s in self.steps if s.retriever is kind]
 
 
-class CRAGBranch(str, Enum):
+class CRAGBranch(StrEnum):
     """CRAG routing branches."""
 
     USE = "use"

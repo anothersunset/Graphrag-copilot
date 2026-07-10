@@ -27,7 +27,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 from graphrag_schemas.evidence import (
     ChunkEvidence,
@@ -80,7 +80,7 @@ async def _fan_out(
     return await asyncio.gather(*(_one(t, r) for t, r in entries))
 
 
-def _get_source_doc(hit: dict) -> str:
+def _get_source_doc(hit: RetrievalHit) -> str:
     """从 hit 中提取来源文档标识（用于多样性分桶）."""
     meta = hit.get("metadata", {})
     for key in ("file_name", "source_file", "document", "source"):
@@ -93,12 +93,12 @@ def _get_source_doc(hit: dict) -> str:
     return cid[:20] if cid else "unknown"
 
 
-def _diversity_select(hits: list[dict], top_k: int) -> list[dict]:
+def _diversity_select(hits: list[RetrievalHit], top_k: int) -> list[RetrievalHit]:
     """来源多样性感知选择：轮询从不同文档选取 chunk，确保跨文档覆盖."""
     if not hits or top_k <= 0:
         return []
 
-    buckets: dict[str, list[dict]] = {}
+    buckets: dict[str, list[RetrievalHit]] = {}
     for h in hits:
         doc = _get_source_doc(h)
         buckets.setdefault(doc, []).append(h)
@@ -106,7 +106,7 @@ def _diversity_select(hits: list[dict], top_k: int) -> list[dict]:
     for bucket in buckets.values():
         bucket.sort(key=lambda x: x.get("score", 0.0), reverse=True)
 
-    result = []
+    result: list[RetrievalHit] = []
     bucket_keys = list(buckets.keys())
     bucket_keys.sort(key=lambda k: buckets[k][0].get("score", 0.0), reverse=True)
 
@@ -174,8 +174,9 @@ def retriever_node(state: GraphState, config: dict[str, Any] | None = None) -> d
     is_crossdoc = plan.get("intent") == "crossdoc" or plan.get("extra_retrieval")
     effective_top_k = min(top_k_rerank * 2, 10) if is_crossdoc else top_k_rerank
 
+    fused: list[RetrievalHit]
     if reranker is not None and merged:
-        fused = reranker.rerank(query, merged, top_k=effective_top_k)
+        fused = cast(list[RetrievalHit], reranker.rerank(query, merged, top_k=effective_top_k))
     else:
         sorted_hits = sorted(merged, key=lambda h: h.get("score", 0.0), reverse=True)
         fused = _diversity_select(sorted_hits, effective_top_k) if is_crossdoc else sorted_hits[:effective_top_k]
@@ -249,17 +250,17 @@ def _build_evidence_pack(*, merged: list[RetrievalHit], fused: list[RetrievalHit
         visited_by_id.setdefault(nid, node)
 
     pre_rank = {h.get("chunk_id"): i + 1 for i, h in enumerate(merged)}
-    rerank_trace = [
-        RerankTraceRow(
-            chunk_id=str(h.get("chunk_id", "")),
-            pre_rerank_rank=int(pre_rank.get(h.get("chunk_id"), i + 1)),
-            post_rerank_rank=i + 1,
-            rerank_score=float(
-                h.get("rerank_score") if h.get("rerank_score") is not None else h.get("score", 0.0)
-            ),
+    rerank_trace = []
+    for i, hit in enumerate(fused):
+        rerank_score = hit.get("rerank_score")
+        rerank_trace.append(
+            RerankTraceRow(
+                chunk_id=hit["chunk_id"],
+                pre_rerank_rank=int(pre_rank.get(hit["chunk_id"], i + 1)),
+                post_rerank_rank=i + 1,
+                rerank_score=float(rerank_score if rerank_score is not None else hit["score"]),
+            )
         )
-        for i, h in enumerate(fused)
-    ]
 
     pack = EvidencePack(
         vector_chunks=chunks,

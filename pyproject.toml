@@ -84,7 +84,7 @@ minversion = "8.0"
 testpaths = ["apps", "packages"]
 pythonpath = ["."]
 asyncio_mode = "auto"
-addopts = "-ra --strict-markers --color=yes"
+addopts = "-ra --strict-markers --color=yes --import-mode=importlib"
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
   "integration: requires external services (Qdrant/Neo4j)",

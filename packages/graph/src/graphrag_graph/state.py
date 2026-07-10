@@ -8,22 +8,22 @@ state by default. Lists that should accumulate across nodes use
 from __future__ import annotations
 
 from operator import add
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, Required, TypedDict
 
 # ---------------------------------------------------------------------------
 # Sub-types
 # ---------------------------------------------------------------------------
 
 
-class RetrievalHit(TypedDict, total=False):
+class RetrievalHit(TypedDict):
     """A single retrieved chunk before / after rerank."""
 
     chunk_id: str
     source: Literal["vector", "bm25", "kg", "web"]
     score: float
-    rerank_score: float | None
     content: str
     metadata: dict[str, Any]
+    rerank_score: NotRequired[float | None]
 
 
 class ToolCall(TypedDict, total=False):
@@ -76,7 +76,7 @@ class GraphState(TypedDict, total=False):
     """
 
     # --- Inputs --------------------------------------------------------
-    question: str
+    question: Required[str]
     session_id: str
     trace_id: str
 

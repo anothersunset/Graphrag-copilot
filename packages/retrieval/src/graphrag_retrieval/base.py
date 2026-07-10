@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
-from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, Literal, NotRequired, Protocol, TypedDict, cast, runtime_checkable
 
 Source = Literal["vector", "bm25", "kg", "web"]
 
 
-class RetrievalHit(TypedDict, total=False):
+class RetrievalHit(TypedDict):
     """A single retrieved chunk.
 
     v3.2: ``path`` and ``visited_node_ids`` are populated by the KG
@@ -19,12 +19,12 @@ class RetrievalHit(TypedDict, total=False):
     chunk_id: str
     source: Source
     score: float
-    rerank_score: float | None
     content: str
     metadata: dict[str, Any]
+    rerank_score: NotRequired[float | None]
     # v3.2 extensions — KG only
-    path: dict[str, Any] | None
-    visited_node_ids: list[str]
+    path: NotRequired[dict[str, Any] | None]
+    visited_node_ids: NotRequired[list[str]]
 
 
 @runtime_checkable
@@ -37,7 +37,7 @@ class AsyncRetriever(Protocol):
 
 
 def rrf_fuse(
-    route_results: Sequence[Sequence[RetrievalHit]],
+    route_results: Sequence[Sequence[Mapping[str, Any]]],
     *,
     k: int = 60,
     chunk_id_key: str = "chunk_id",
@@ -59,16 +59,27 @@ def rrf_fuse(
             rrf_scores[key] = rrf_scores.get(key, 0.0) + 1.0 / (k + rank)
             prior = best_seen.get(key)
             if prior is None or (hit.get("score", 0.0) > prior.get("score", 0.0)):
-                best_seen[key] = hit
+                best_seen[key] = _normalise_hit(hit, chunk_id=key)
 
     fused: list[RetrievalHit] = []
     for key, rrf_score in rrf_scores.items():
-        h = dict(best_seen[key])
+        h = _normalise_hit(best_seen[key], chunk_id=key)
         h["score"] = rrf_score
         fused.append(h)
 
     fused.sort(key=lambda h: h.get("score", 0.0), reverse=True)
     return fused
+
+
+def _normalise_hit(hit: Mapping[str, Any], *, chunk_id: str | None = None) -> RetrievalHit:
+    """Copy an external hit while enforcing the required retrieval contract."""
+    data = dict(hit)
+    data.setdefault("chunk_id", chunk_id or _content_key(str(data.get("content", ""))))
+    data.setdefault("source", "vector")
+    data.setdefault("score", 0.0)
+    data.setdefault("content", "")
+    data.setdefault("metadata", {})
+    return cast(RetrievalHit, data)
 
 
 def _content_key(content: str, *, prefix_len: int = 80) -> str:

@@ -62,9 +62,12 @@ class EntityResolver:
 
     # -- similarity -----------------------------------------------------
     def _embed(self, ent: EntityRecord) -> list[float]:
+        embedder = self._embedder
+        if embedder is None:
+            raise RuntimeError("entity resolver has no embedder")
         key = f"{ent.name}|{ent.description[:80]}"
         if key not in self._vec_cache:
-            self._vec_cache[key] = self._embedder.embed(f"{ent.name} {ent.description}".strip())
+            self._vec_cache[key] = embedder.embed(f"{ent.name} {ent.description}".strip())
         return self._vec_cache[key]
 
     def _similar(self, a: EntityRecord, b: EntityRecord) -> bool:
