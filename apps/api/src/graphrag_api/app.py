@@ -10,10 +10,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import Depends, FastAPI, Header, HTTPException
 from graphrag_kg import Chunk, build_index
 from pydantic import BaseModel, Field
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from graphrag_api import __version__
 from graphrag_api.assembly import build_orchestrator_from_index

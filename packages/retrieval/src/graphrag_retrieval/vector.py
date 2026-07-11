@@ -46,7 +46,7 @@ class VectorRetriever:
         self._breaker_open_until: float = 0.0
 
     @property
-    def client(self):
+    def client(self) -> Any:
         if self._client is None:
             from qdrant_client import QdrantClient
 
@@ -72,7 +72,8 @@ class VectorRetriever:
 
         try:
             vector = self._embed(query)
-            results = self.client.search(
+            client = self.client
+            results = client.search(
                 collection_name=self.collection,
                 query_vector=vector,
                 limit=top_k,

@@ -1,5 +1,5 @@
-from fastapi.testclient import TestClient
 from graphrag_api.app import create_app
+from starlette.testclient import TestClient
 
 
 class FakeOrchestrator:

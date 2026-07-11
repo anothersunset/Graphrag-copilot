@@ -73,6 +73,19 @@ indent-style = "space"
 [tool.pyright]
 include = ["apps", "packages"]
 exclude = ["**/node_modules", "**/__pycache__", "**/.venv", "backend", "frontend", "eval"]
+extraPaths = [
+  "apps/api/src",
+  "packages/eval/src",
+  "packages/evals/src",
+  "packages/graph/src",
+  "packages/kg/src",
+  "packages/observability/src",
+  "packages/parsers/src",
+  "packages/reranker/src",
+  "packages/retrieval/src",
+  "packages/retriever/src",
+  "packages/schemas/src",
+]
 pythonVersion = "3.12"
 typeCheckingMode = "basic"  # W7 tightens to "strict" — see migration-roadmap.md
 reportMissingImports = "warning"

@@ -1,8 +1,8 @@
 """Health and readiness contracts for the canonical application."""
 
-from fastapi.testclient import TestClient
 from graphrag_api import __version__
 from graphrag_api.app import create_app
+from starlette.testclient import TestClient
 
 
 def test_healthz_is_public_and_ready_fails_closed_without_index() -> None:
