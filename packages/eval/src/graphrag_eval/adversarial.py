@@ -19,8 +19,8 @@ without a real Neo4j / vector DB.
 """
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Callable, Sequence
 
 
 @dataclass
@@ -94,7 +94,7 @@ def run_adversarial(
     results: list[CaseResult] = []
 
     for case in cases:
-        corpus = list(case.gold_chunks) + [case.distractor_chunk]
+        corpus = [*case.gold_chunks, case.distractor_chunk]
         state = orchestrator(case.question, corpus)
 
         cited = list(state.get("cited_chunk_ids") or [])

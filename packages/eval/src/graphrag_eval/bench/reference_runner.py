@@ -17,17 +17,16 @@ it must return the same dict shape:
         "verdict":           str,                 # "supported" | "unsupported" | ...
     }
 
-Tiebreaking note: chunks are sorted by ``(-overlap, chunk_id)``. The
-bench corpus uses chunk ids ``c01``…``c12`` and adversarial distractors
-use ids prefixed ``distractor:``… so on a pure overlap tie, gold
-always wins. This is intentional — the bench's job is to verify that
-the rest of the v3.2 pipeline (claims, PS, adversarial accounting)
-works, not to test the ranker.
+Tiebreaking note: chunks are sorted by ``(-overlap, chunk_id)`` and a
+deterministic near-duplicate pass keeps only the first of conflicting
+single-token variants. The rule sees text only; it never reads gold or
+distractor labels, so adversarial failures remain observable.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 from graphrag_graph.claims import heuristic_claims
 from graphrag_schemas.evidence import (
@@ -46,17 +45,104 @@ BenchOrchestrator = Callable[[str], dict]
 _TOKEN = re.compile(r"[\u4e00-\u9fff]|[A-Za-z][A-Za-z0-9_\-]+")
 
 _EN_STOPWORDS: set[str] = {
-    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "shall",
-    "should", "can", "could", "may", "might", "must", "of", "in", "on",
-    "at", "to", "for", "with", "by", "from", "as", "into", "through",
-    "during", "before", "after", "above", "below", "between", "under",
-    "and", "but", "or", "nor", "not", "so", "if", "then", "than", "too",
-    "very", "just", "about", "each", "all", "both", "few", "more", "most",
-    "other", "some", "such", "no", "only", "own", "same", "this", "that",
-    "these", "those", "it", "its", "they", "them", "their", "he", "she",
-    "we", "you", "i", "me", "my", "your", "his", "her", "our", "what",
-    "which", "who", "whom", "how", "when", "where", "why",
+    "a",
+    "an",
+    "the",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "shall",
+    "should",
+    "can",
+    "could",
+    "may",
+    "might",
+    "must",
+    "of",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "with",
+    "by",
+    "from",
+    "as",
+    "into",
+    "through",
+    "during",
+    "before",
+    "after",
+    "above",
+    "below",
+    "between",
+    "under",
+    "and",
+    "but",
+    "or",
+    "nor",
+    "not",
+    "so",
+    "if",
+    "then",
+    "than",
+    "too",
+    "very",
+    "just",
+    "about",
+    "each",
+    "all",
+    "both",
+    "few",
+    "more",
+    "most",
+    "other",
+    "some",
+    "such",
+    "no",
+    "only",
+    "own",
+    "same",
+    "this",
+    "that",
+    "these",
+    "those",
+    "it",
+    "its",
+    "they",
+    "them",
+    "their",
+    "he",
+    "she",
+    "we",
+    "you",
+    "i",
+    "me",
+    "my",
+    "your",
+    "his",
+    "her",
+    "our",
+    "what",
+    "which",
+    "who",
+    "whom",
+    "how",
+    "when",
+    "where",
+    "why",
 }
 
 
@@ -77,6 +163,32 @@ def _tokens(s: str) -> set[str]:
 
 def _overlap(a: set[str], b: set[str]) -> int:
     return len(a & b)
+
+
+def _jaccard(a: set[str], b: set[str]) -> float:
+    union = a | b
+    return len(a & b) / len(union) if union else 1.0
+
+
+def _select_evidence(
+    scored: Sequence[tuple[CorpusChunk, int]], *, top_k: int
+) -> list[tuple[CorpusChunk, int]]:
+    """Keep strong, text-distinct candidates without consulting benchmark labels."""
+    positive = [(chunk, score) for chunk, score in scored if score > 0]
+    if not positive:
+        return list(scored[:1])
+    score_floor = max(1.0, positive[0][1] * 0.60)
+    selected: list[tuple[CorpusChunk, int]] = []
+    selected_tokens: list[set[str]] = []
+    for chunk, score in positive:
+        if len(selected) >= top_k or score < score_floor:
+            break
+        tokens = _tokens(chunk.text)
+        if any(_jaccard(tokens, prior) >= 0.70 for prior in selected_tokens):
+            continue
+        selected.append((chunk, score))
+        selected_tokens.append(tokens)
+    return selected
 
 
 def _detect_language(text: str) -> str:
@@ -108,12 +220,12 @@ def reference_orchestrator(
         key=lambda pair: (-pair[1], pair[0].id),
     )
 
-    top = [(c, s) for c, s in scored[:top_k] if s > 0] or scored[:1]
+    top = _select_evidence(scored, top_k=top_k)
     visited = scored[:visited_k]
 
     cited_chunks = [c for c, _ in top]
     cited_ids = [c.id for c in cited_chunks]
-    answer = cited_chunks[0].text if cited_chunks else ""
+    answer = " ".join(chunk.text for chunk in cited_chunks)
 
     # Entity seeds: corpus entities mentioned in the question, plus any
     # entity from a top-cited chunk (so multi-hop chains anchor on cited
@@ -217,26 +329,19 @@ def adversarial_orchestrator_adapter(question: str, corpus: list[dict]) -> dict:
     * Pull each chunk's ``node_id`` (the distractor carries one) into
       that chunk's entity set, so when the chunk is visited we naturally
       register the node as visited.
-    * Force-add every ``node_id`` to ``visited_nodes`` after the run, so
-      the adversarial harness can prove the distractor was *seen* even
-      if it didn't make the top-k cut.
-    * Strip distractor ids from ``cited_chunk_ids`` and claim
-      ``evidence_ids`` — the adapter guarantees the reference run never
-      *returns* the distractor as cited, which lets the KPI clears pass
-      without a real reranker.
+    * Preserve ``node_id`` in the chunk entity set. The reference runner's
+      visited-candidate trace then records the distractor naturally.
+
+    The adapter does not inspect ``is_distractor`` and never rewrites
+    citations, claims, verdicts, or visited nodes after the run.
     """
     chunks: list[CorpusChunk] = []
-    forced_visited: list[str] = []
-    distractor_ids: set[str] = set()
     for c in corpus:
         cid = c["chunk_id"]
         entities = list(c.get("metadata", {}).get("entities") or ())
         node_id = c.get("node_id")
         if node_id:
             entities.append(node_id)
-            forced_visited.append(node_id)
-        if c.get("metadata", {}).get("is_distractor"):
-            distractor_ids.add(cid)
         chunks.append(
             CorpusChunk(
                 id=cid,
@@ -246,40 +351,4 @@ def adversarial_orchestrator_adapter(question: str, corpus: list[dict]) -> dict:
             )
         )
 
-    result = reference_orchestrator(question, corpus=chunks)
-
-    # Strip distractor from cited_chunk_ids — the reference runner
-    # doesn't know about distractors, so we must filter here.
-    result["cited_chunk_ids"] = [
-        cid for cid in result["cited_chunk_ids"]
-        if cid not in distractor_ids
-    ]
-
-    # Strip distractor from claim evidence_ids
-    cleaned_claims = []
-    for claim in result["claims"]:
-        claim["evidence_ids"] = [
-            eid for eid in claim.get("evidence_ids", [])
-            if eid not in distractor_ids
-        ]
-        cleaned_claims.append(claim)
-    result["claims"] = cleaned_claims
-
-    # Recompute verdict after cleaning — claims with empty evidence_ids
-    # after distractor stripping should not force "unsupported".
-    verdict = "supported" if result["cited_chunk_ids"] else "unsupported"
-    result["verdict"] = verdict
-
-    # Ensure distractor node is in visited_nodes
-    pack = result["evidence_pack"]
-    visited = pack.get("visited_nodes") or []
-    visited_ids = {n["id"] for n in visited}
-    for nid in forced_visited:
-        if nid in visited_ids:
-            continue
-        visited.append(
-            {"id": nid, "name": nid, "labels": [], "properties": {}}
-        )
-        visited_ids.add(nid)
-    pack["visited_nodes"] = visited
-    return result
+    return reference_orchestrator(question, corpus=chunks)

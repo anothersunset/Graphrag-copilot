@@ -61,7 +61,7 @@ def auditor_node(state: dict, *, config: dict | None = None) -> dict:
             pass
 
     valid_ids = {str(chunk_id) for chunk_id in chunk_ids if chunk_id}
-    cited = [str(chunk_id) for chunk_id in cited if str(chunk_id) in valid_ids]
+    cited = list(dict.fromkeys(str(chunk_id) for chunk_id in cited if str(chunk_id) in valid_ids))
     if not cited:
         generated = state.get("citations") or []
         cited = [
@@ -70,7 +70,11 @@ def auditor_node(state: dict, *, config: dict | None = None) -> dict:
             if item.get("chunk_id") and str(item.get("chunk_id")) in valid_ids
         ]
     if not cited:
-        cited = [chunk_id for chunk_id in valid_ids if chunk_id in answer]
+        cited = [
+            str(hit.get("chunk_id"))
+            for hit in fused
+            if hit.get("chunk_id") and str(hit.get("chunk_id")) in answer
+        ]
     if not cited:
         raw_verdict = "unsupported"
         rationale = rationale or "heuristic auditor: no valid evidence citation"
@@ -82,16 +86,36 @@ def auditor_node(state: dict, *, config: dict | None = None) -> dict:
             contexts=fused,
         )
 
+    cited_set = set(cited)
+    invalid_claim_evidence = 0
+    validated_claims: list[Claim] = []
+    for claim in claims:
+        evidence_ids = [str(evidence_id) for evidence_id in claim.evidence_ids]
+        resolved_ids = [
+            evidence_id
+            for evidence_id in evidence_ids
+            if evidence_id in valid_ids and evidence_id in cited_set
+        ]
+        has_invalid_evidence = len(resolved_ids) != len(evidence_ids)
+        if has_invalid_evidence:
+            invalid_claim_evidence += 1
+        support = "unsupported" if has_invalid_evidence or not resolved_ids else claim.support
+        validated_claims.append(
+            claim.model_copy(update={"evidence_ids": resolved_ids, "support": support})
+        )
+    claims = validated_claims
+
     verdict = _coerce_verdict(raw_verdict)
     unsupported = sum(1 for c in claims if not c.is_supported())
-    if not cited or unsupported:
+    if not cited or unsupported or invalid_claim_evidence:
         verdict = "fail"
     audit = {
         "node": "auditor",
         "decision": verdict,
         "rationale": (
             f"verdict={raw_verdict} cited={len(cited)} "
-            f"claims={len(claims)} unsupported={unsupported}"
+            f"claims={len(claims)} unsupported={unsupported} "
+            f"invalid_claim_evidence={invalid_claim_evidence}"
         ),
         "inputs_digest": "",
         "outputs_digest": "",

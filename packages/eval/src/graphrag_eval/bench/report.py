@@ -4,6 +4,7 @@ The rendered file is what we check in to ``eval/results/`` so the repo
 always shows the latest measured KPIs alongside the code that produced
 them.
 """
+
 from __future__ import annotations
 
 from .runner import ProvenanceBenchReport
@@ -24,6 +25,11 @@ def render_markdown(
 ) -> str:
     adv = report.adversarial
     ps_pass = report.ps_mean >= report.ps_target
+    answer_pass = report.answer_point_recall_mean >= report.answer_point_recall_target
+    retrieval_pass = report.retrieval_recall_at_5_mean >= report.retrieval_recall_at_5_target
+    citation_precision_pass = report.citation_precision_mean >= report.citation_precision_target
+    citation_recall_pass = report.citation_recall_mean >= report.citation_recall_target
+    citation_validity_pass = report.citation_validity_rate >= report.citation_validity_target
     misled_pass = adv.misled_rate <= report.misled_max
     hall_pass = adv.hallucination_rate <= report.hallucination_max
     visited_pass = adv.distractor_visited_rate >= report.distractor_visited_min
@@ -44,8 +50,27 @@ def render_markdown(
         f"{_fmt(report.ps_mean)} | {_check(ps_pass)} |"
     )
     lines.append(
-        f"| PS pass rate (≥ {report.ps_floor:.2f}) | — | "
-        f"{_fmt(report.ps_pass_rate)} | — |"
+        f"| PS pass rate (≥ {report.ps_floor:.2f}) | — | {_fmt(report.ps_pass_rate)} | — |"
+    )
+    lines.append(
+        f"| Required answer-point recall | ≥ {report.answer_point_recall_target:.2f} | "
+        f"{_fmt(report.answer_point_recall_mean)} | {_check(answer_pass)} |"
+    )
+    lines.append(
+        f"| Retrieval Recall@5 | ≥ {report.retrieval_recall_at_5_target:.2f} | "
+        f"{_fmt(report.retrieval_recall_at_5_mean)} | {_check(retrieval_pass)} |"
+    )
+    lines.append(
+        f"| Citation precision | ≥ {report.citation_precision_target:.2f} | "
+        f"{_fmt(report.citation_precision_mean)} | {_check(citation_precision_pass)} |"
+    )
+    lines.append(
+        f"| Citation recall | ≥ {report.citation_recall_target:.2f} | "
+        f"{_fmt(report.citation_recall_mean)} | {_check(citation_recall_pass)} |"
+    )
+    lines.append(
+        f"| Citation validity | ≥ {report.citation_validity_target:.2f} | "
+        f"{_fmt(report.citation_validity_rate)} | {_check(citation_validity_pass)} |"
     )
     lines.append(
         f"| Adversarial misled_rate | ≤ {report.misled_max:.2f} | "
@@ -69,14 +94,16 @@ def render_markdown(
         f"PS median: **{_fmt(report.ps_median)}**"
     )
     lines.append("")
-    lines.append("| # | Lang | Category | PS | Recall | Coverage | Cited |")
-    lines.append("|---|---|---|---|---|---|---|")
+    lines.append("| # | Lang | Category | PS | Answer pts | R@5 | Cit. P/R/V | Cited |")
+    lines.append("|---|---|---|---|---|---|---|---|")
     for r in report.question_results:
         cited = ", ".join(r.cited_chunk_ids[:3]) or "—"
         lines.append(
             f"| `{r.question_id}` | {r.language} | {r.category} | "
-            f"{_fmt(r.provenance.score)} | {_fmt(r.provenance.sentence_recall)} | "
-            f"{_fmt(r.provenance.coverage)} | {cited} |"
+            f"{_fmt(r.provenance.score)} | {_fmt(r.answer_point_recall)} | "
+            f"{_fmt(r.retrieval_recall_at_5)} | "
+            f"{_fmt(r.citation_precision)}/{_fmt(r.citation_recall)}/{_fmt(r.citation_validity)} | "
+            f"{cited} |"
         )
     lines.append("")
 
@@ -96,9 +123,7 @@ def render_markdown(
     lines.append("## How to regenerate")
     lines.append("")
     lines.append("```bash")
-    lines.append(
-        "uv run --package graphrag-eval python -m graphrag_eval.bench \\"
-    )
+    lines.append("uv run --package graphrag-eval python -m graphrag_eval.bench \\")
     lines.append("    --out eval/results/v3.2-provenance-baseline.md")
     lines.append("```")
     lines.append("")

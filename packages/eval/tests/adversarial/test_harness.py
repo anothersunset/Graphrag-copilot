@@ -9,9 +9,6 @@ from .fixtures import build_cases
 def _ideal_orchestrator(question: str, corpus: list[dict]) -> dict:
     """Cites only the gold chunk, claims bind to it, distractor is visited."""
     gold = [c for c in corpus if not c.get("metadata", {}).get("is_distractor")]
-    distractor = next(
-        (c for c in corpus if c.get("metadata", {}).get("is_distractor")), None
-    )
     cited = [gold[0]["chunk_id"]] if gold else []
     claims = [
         {"text": "answer.", "evidence_ids": cited, "support": "supported"}

@@ -4,7 +4,6 @@ from __future__ import annotations
 from graphrag_eval.deepeval_runner import DeepEvalRunner
 from graphrag_eval.ragas_runner import EvalSample, RagasRunner
 
-
 SAMPLES = [
     EvalSample(
         question="What is GraphRAG?",

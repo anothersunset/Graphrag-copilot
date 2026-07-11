@@ -14,6 +14,7 @@ The adversarial cases reuse chunks from ``corpus.py`` and lean on
 ``graphrag_eval.adversarial.build_distractor`` so the swap is auditable
 in the report.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -33,6 +34,8 @@ class BenchQuestion:
     category: Category
     gold_answer: str
     gold_chunk_ids: tuple[str, ...] = field(default_factory=tuple)
+    required_answer_points: tuple[str, ...] = field(default_factory=tuple)
+    forbidden_answer_points: tuple[str, ...] = field(default_factory=tuple)
 
 
 GOLD_QUESTIONS: tuple[BenchQuestion, ...] = (
@@ -43,6 +46,8 @@ GOLD_QUESTIONS: tuple[BenchQuestion, ...] = (
         category="factual",
         gold_answer="Neo4j uses Cypher as its query language.",
         gold_chunk_ids=("c01",),
+        required_answer_points=("Neo4j", "Cypher"),
+        forbidden_answer_points=("SQL",),
     ),
     BenchQuestion(
         id="q02-en-multi-hop",
@@ -51,6 +56,8 @@ GOLD_QUESTIONS: tuple[BenchQuestion, ...] = (
         category="multi_hop",
         gold_answer="GraphRAG's default backend Neo4j supports Cypher.",
         gold_chunk_ids=("c03", "c01"),
+        required_answer_points=("GraphRAG", "Neo4j", "Cypher"),
+        forbidden_answer_points=("MongoDB", "SQL"),
     ),
     BenchQuestion(
         id="q03-en-numeric",
@@ -59,6 +66,8 @@ GOLD_QUESTIONS: tuple[BenchQuestion, ...] = (
         category="numeric",
         gold_answer="BGE-Reranker-v2-m3 was released by BAAI in 2024.",
         gold_chunk_ids=("c04",),
+        required_answer_points=("BGE-Reranker-v2-m3", "BAAI", "2024"),
+        forbidden_answer_points=("2022",),
     ),
     BenchQuestion(
         id="q04-en-definition",
@@ -67,6 +76,7 @@ GOLD_QUESTIONS: tuple[BenchQuestion, ...] = (
         category="definition",
         gold_answer="Self-RAG augments a base model with on-the-fly retrieval and reflection tokens to gate generation.",
         gold_chunk_ids=("c06",),
+        required_answer_points=("Self-RAG", "retrieval", "reflection"),
     ),
     BenchQuestion(
         id="q05-zh-factual",
@@ -75,6 +85,8 @@ GOLD_QUESTIONS: tuple[BenchQuestion, ...] = (
         category="factual",
         gold_answer="Neo4j 的官方查询语言是 Cypher。",
         gold_chunk_ids=("c07",),
+        required_answer_points=("Neo4j", "Cypher"),
+        forbidden_answer_points=("SQL",),
     ),
     BenchQuestion(
         id="q06-zh-multi-hop",
@@ -83,6 +95,8 @@ GOLD_QUESTIONS: tuple[BenchQuestion, ...] = (
         category="multi_hop",
         gold_answer="GraphRAG 默认使用 Neo4j 作为图存储后端，查询语言为 Cypher。",
         gold_chunk_ids=("c09", "c07"),
+        required_answer_points=("GraphRAG", "Neo4j", "Cypher"),
+        forbidden_answer_points=("MongoDB", "SQL"),
     ),
     BenchQuestion(
         id="q07-zh-numeric",
@@ -91,6 +105,8 @@ GOLD_QUESTIONS: tuple[BenchQuestion, ...] = (
         category="numeric",
         gold_answer="GraphRAG 在中文企业知识库场景下能将多跳问答准确率提升约 15 个百分点。",
         gold_chunk_ids=("c10",),
+        required_answer_points=("GraphRAG", "15 个百分点"),
+        forbidden_answer_points=("提升约 5 个百分点",),
     ),
     BenchQuestion(
         id="q08-zh-definition",
@@ -99,18 +115,48 @@ GOLD_QUESTIONS: tuple[BenchQuestion, ...] = (
         category="definition",
         gold_answer="Anthropic 在 2024 年提出的 Contextual Retrieval 可将检索失败率降低约 49%。",
         gold_chunk_ids=("c12",),
+        required_answer_points=("Anthropic", "2024", "Contextual Retrieval", "49%"),
+        forbidden_answer_points=("Cohere",),
     ),
 )
 
 
 _ADV_GOLD: dict[str, dict] = {
-    "c01": {"chunk_id": "c01", "content": "Neo4j is a property graph database that uses Cypher as its query language.", "source": "bm25"},
-    "c02": {"chunk_id": "c02", "content": "GraphRAG is a retrieval architecture that combines vector search with knowledge graph traversal.", "source": "bm25"},
-    "c03": {"chunk_id": "c03", "content": "GraphRAG uses Neo4j as its default graph backend in many open-source implementations.", "source": "bm25"},
-    "c04": {"chunk_id": "c04", "content": "BGE-Reranker-v2-m3 was released by BAAI in 2024 and supports multilingual reranking.", "source": "bm25"},
-    "c05": {"chunk_id": "c05", "content": "The Corrective Retrieval Augmented Generation paper was published at ACL 2024.", "source": "bm25"},
-    "c10": {"chunk_id": "c10", "content": "GraphRAG 在中文企业知识库场景下相比纯向量检索能将多跳问答准确率提升约 15 个百分点。", "source": "bm25"},
-    "c12": {"chunk_id": "c12", "content": "Anthropic 在 2024 年提出的 Contextual Retrieval 通过为每个分块附加上下文摘要降低检索失败率约 49%。", "source": "bm25"},
+    "c01": {
+        "chunk_id": "c01",
+        "content": "Neo4j is a property graph database that uses Cypher as its query language.",
+        "source": "bm25",
+    },
+    "c02": {
+        "chunk_id": "c02",
+        "content": "GraphRAG is a retrieval architecture that combines vector search with knowledge graph traversal.",
+        "source": "bm25",
+    },
+    "c03": {
+        "chunk_id": "c03",
+        "content": "GraphRAG uses Neo4j as its default graph backend in many open-source implementations.",
+        "source": "bm25",
+    },
+    "c04": {
+        "chunk_id": "c04",
+        "content": "BGE-Reranker-v2-m3 was released by BAAI in 2024 and supports multilingual reranking.",
+        "source": "bm25",
+    },
+    "c05": {
+        "chunk_id": "c05",
+        "content": "The Corrective Retrieval Augmented Generation paper was published at ACL 2024.",
+        "source": "bm25",
+    },
+    "c10": {
+        "chunk_id": "c10",
+        "content": "GraphRAG 在中文企业知识库场景下相比纯向量检索能将多跳问答准确率提升约 15 个百分点。",
+        "source": "bm25",
+    },
+    "c12": {
+        "chunk_id": "c12",
+        "content": "Anthropic 在 2024 年提出的 Contextual Retrieval 通过为每个分块附加上下文摘要降低检索失败率约 49%。",
+        "source": "bm25",
+    },
 }
 
 

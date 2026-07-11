@@ -14,11 +14,13 @@ The entailer is dependency-injected so offline runs can swap in a
 BGE-Reranker-v2-m3 cross-encoder or a small NLI model for higher
 fidelity.
 """
+
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, Protocol
+from typing import Protocol
 
 
 class _Entailer(Protocol):
@@ -63,13 +65,42 @@ class ProvenanceReport:
         }
 
 
-_TOKEN = re.compile(r"[\u4e00-\u9fff]|[A-Za-z][A-Za-z0-9_]+")
+_TOKEN = re.compile(r"\d+(?:[._-]\d+)*(?:%|％)?|[\u4e00-\u9fff]|[A-Za-z][A-Za-z0-9_-]+")
+_CRITICAL_ATOM = re.compile(
+    r"(?<![A-Za-z0-9])(?:v\d+(?:[._-]\d+)+|\d+(?:[._-]\d+)+|\d+)"
+    r"(?:%|％|个百分点|年|毫秒|秒|ms)?(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+_EN_NEGATION = re.compile(
+    r"\b(?:not|never|no|without|cannot|can't|isn't|aren't|doesn't|don't|won't|"
+    r"unavailable|disabled)\b",
+    re.IGNORECASE,
+)
+_CJK_NEGATION = re.compile(r"(?:没有|不是|无法|不能|禁止|不可用|未|无|不)")
 
 
 def _tokens(s: str) -> set[str]:
     if not s:
         return set()
-    return {t.lower() for t in _TOKEN.findall(s) if len(t) >= 2 or (len(t) == 1 and "\u4e00" <= t <= "\u9fff")}
+    return {
+        t.lower()
+        for t in _TOKEN.findall(s)
+        if len(t) >= 2 or (len(t) == 1 and "\u4e00" <= t <= "\u9fff")
+    }
+
+
+def _critical_atoms(s: str) -> set[str]:
+    return {atom.lower().replace("％", "%") for atom in _CRITICAL_ATOM.findall(s)}
+
+
+def _has_negation(s: str) -> bool:
+    return bool(_EN_NEGATION.search(s) or _CJK_NEGATION.search(s))
+
+
+def _critical_atoms_compatible(*, claim: str, evidence: str) -> bool:
+    return _critical_atoms(claim).issubset(_critical_atoms(evidence)) and (
+        _has_negation(claim) == _has_negation(evidence)
+    )
 
 
 def provenance_sufficiency(
@@ -96,7 +127,14 @@ def provenance_sufficiency(
     for claim in claims:
         text = claim.get("text", "") if isinstance(claim, dict) else getattr(claim, "text", "")
         evidence_ids = list(
-            claim.get("evidence_ids", []) if isinstance(claim, dict) else getattr(claim, "evidence_ids", [])
+            claim.get("evidence_ids", [])
+            if isinstance(claim, dict)
+            else getattr(claim, "evidence_ids", [])
+        )
+        support = (
+            claim.get("support", "supported")
+            if isinstance(claim, dict)
+            else getattr(claim, "support", "supported")
         )
         if not text.strip():
             continue
@@ -109,6 +147,10 @@ def provenance_sufficiency(
                 continue
             content = chunk_contents.get(eid, "")
             if not content:
+                continue
+            if support != "supported" or not _critical_atoms_compatible(
+                claim=text, evidence=content
+            ):
                 continue
             overlap = len(claim_tokens & _tokens(content))
             ok = overlap >= min_overlap
@@ -140,9 +182,7 @@ def provenance_sufficiency(
     covered: set[str] = set()
     for eid in cited_set:
         covered |= _tokens(chunk_contents.get(eid, ""))
-    coverage = (
-        len(answer_tokens & covered) / len(answer_tokens) if answer_tokens else 0.0
-    )
+    coverage = len(answer_tokens & covered) / len(answer_tokens) if answer_tokens else 0.0
     coverage_bonus = 1.0 if coverage >= coverage_floor else coverage / coverage_floor
 
     score = recall_weight * sentence_recall + (1.0 - recall_weight) * coverage_bonus

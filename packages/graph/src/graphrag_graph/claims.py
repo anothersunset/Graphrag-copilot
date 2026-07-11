@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -23,7 +23,7 @@ class Claim(BaseModel):
     text: str
     evidence_ids: list[str] = Field(default_factory=list)
     # "supported" | "unsupported" | "partial"
-    support: str = "supported"
+    support: Literal["supported", "partial", "unsupported"] = "supported"
 
     def is_supported(self) -> bool:
         return self.support == "supported" and bool(self.evidence_ids)
@@ -137,7 +137,8 @@ def heuristic_claims(
         matched = [
             cid
             for cid in cited_chunk_ids
-            if len(sent_tokens & _tokens(by_id.get(cid, ""))) >= min_overlap
+            if _critical_atoms_compatible(claim=sent, evidence=by_id.get(cid, ""))
+            and len(sent_tokens & _tokens(by_id.get(cid, ""))) >= min_overlap
         ]
         claims.append(
             Claim(
@@ -149,13 +150,38 @@ def heuristic_claims(
     return claims
 
 
-_TOKEN = re.compile(r"[\u4e00-\u9fff]|[A-Za-z][A-Za-z0-9_]+")
+_TOKEN = re.compile(r"\d+(?:[._-]\d+)*(?:%|％)?|[\u4e00-\u9fff]|[A-Za-z][A-Za-z0-9_-]+")
+_CRITICAL_ATOM = re.compile(
+    r"(?<![A-Za-z0-9])(?:v\d+(?:[._-]\d+)+|\d+(?:[._-]\d+)+|\d+)"
+    r"(?:%|％|个百分点|年|毫秒|秒|ms)?(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+_EN_NEGATION = re.compile(
+    r"\b(?:not|never|no|without|cannot|can't|isn't|aren't|doesn't|don't|won't|"
+    r"unavailable|disabled)\b",
+    re.IGNORECASE,
+)
+_CJK_NEGATION = re.compile(r"(?:没有|不是|无法|不能|禁止|不可用|未|无|不)")
 
 
 def _tokens(s: str) -> set[str]:
     if not s:
         return set()
     return {t.lower() for t in _TOKEN.findall(s) if len(t) >= 2 or _is_cjk(t)}
+
+
+def _critical_atoms(s: str) -> set[str]:
+    return {atom.lower().replace("％", "%") for atom in _CRITICAL_ATOM.findall(s)}
+
+
+def _has_negation(s: str) -> bool:
+    return bool(_EN_NEGATION.search(s) or _CJK_NEGATION.search(s))
+
+
+def _critical_atoms_compatible(*, claim: str, evidence: str) -> bool:
+    return _critical_atoms(claim).issubset(_critical_atoms(evidence)) and (
+        _has_negation(claim) == _has_negation(evidence)
+    )
 
 
 def _is_cjk(t: str) -> bool:

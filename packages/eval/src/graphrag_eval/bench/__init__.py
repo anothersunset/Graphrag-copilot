@@ -41,12 +41,12 @@ from .runner import ProvenanceBenchReport, QuestionResult, run_bench
 
 __all__ = [
     "BENCH_DISTRACTORS",
-    "BenchOrchestrator",
-    "BenchQuestion",
     "CORPUS",
-    "CorpusChunk",
     "GOLD_QUESTIONS",
     "GRAPH_TRIPLES",
+    "BenchOrchestrator",
+    "BenchQuestion",
+    "CorpusChunk",
     "ProvenanceBenchReport",
     "QuestionResult",
     "adversarial_orchestrator_adapter",

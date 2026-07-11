@@ -8,7 +8,13 @@ license = { text = "MIT" }
 authors = [{ name = "lee fanwei" }]
 dependencies = [
     "pydantic>=2.7",
+    "graphrag-graph",
+    "graphrag-schemas",
 ]
+
+[tool.uv.sources]
+graphrag-graph = { workspace = true }
+graphrag-schemas = { workspace = true }
 
 [project.optional-dependencies]
 ragas = ["ragas>=0.2,<0.3"]

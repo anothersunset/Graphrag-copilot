@@ -90,3 +90,28 @@ def test_heuristic_claims_falls_back_when_no_contexts():
     assert len(claims) == 2
     assert all(c.evidence_ids == ["c1"] for c in claims)
     assert all(c.support == "supported" for c in claims)
+
+
+def test_heuristic_claims_rejects_numeric_and_version_conflicts():
+    contexts = [
+        {
+            "chunk_id": "c1",
+            "content": "BGE-Reranker-v2-m3 was released in 2024 with recall 49%.",
+        }
+    ]
+    claims = heuristic_claims(
+        "BGE-Reranker-v2-m3 was released in 2022 with recall 15%.",
+        cited_chunk_ids=["c1"],
+        contexts=contexts,
+    )
+    assert claims[0].support == "unsupported"
+    assert claims[0].evidence_ids == []
+
+
+def test_heuristic_claims_rejects_obvious_negation_conflict():
+    claims = heuristic_claims(
+        "Neo4j is available.",
+        cited_chunk_ids=["c1"],
+        contexts=[{"chunk_id": "c1", "content": "Neo4j is not available."}],
+    )
+    assert claims[0].support == "unsupported"

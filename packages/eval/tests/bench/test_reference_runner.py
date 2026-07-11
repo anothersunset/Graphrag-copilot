@@ -1,8 +1,8 @@
 """Tests for the deterministic reference orchestrator + adversarial adapter."""
+
 from __future__ import annotations
 
 import pytest
-
 from graphrag_eval.bench import (
     BENCH_DISTRACTORS,
     GOLD_QUESTIONS,
@@ -49,7 +49,7 @@ def test_reference_emits_verdict_supported_for_gold():
 
 def test_adversarial_adapter_visits_distractor_node():
     case = BENCH_DISTRACTORS[0]
-    corpus = list(case.gold_chunks) + [case.distractor_chunk]
+    corpus = [*case.gold_chunks, case.distractor_chunk]
     out = adversarial_orchestrator_adapter(case.question, corpus)
     visited_ids = {n["id"] for n in out["evidence_pack"]["visited_nodes"]}
     assert case.distractor_chunk["node_id"] in visited_ids
@@ -57,7 +57,7 @@ def test_adversarial_adapter_visits_distractor_node():
 
 def test_adversarial_adapter_does_not_cite_distractor():
     for case in BENCH_DISTRACTORS:
-        corpus = list(case.gold_chunks) + [case.distractor_chunk]
+        corpus = [*case.gold_chunks, case.distractor_chunk]
         out = adversarial_orchestrator_adapter(case.question, corpus)
         assert case.distractor_chunk["chunk_id"] not in out["cited_chunk_ids"], (
             f"{case.case_id}: distractor was cited"
@@ -66,10 +66,29 @@ def test_adversarial_adapter_does_not_cite_distractor():
 
 def test_adversarial_adapter_claims_never_bind_distractor():
     for case in BENCH_DISTRACTORS:
-        corpus = list(case.gold_chunks) + [case.distractor_chunk]
+        corpus = [*case.gold_chunks, case.distractor_chunk]
         out = adversarial_orchestrator_adapter(case.question, corpus)
         distractor_id = case.distractor_chunk["chunk_id"]
         for claim in out["claims"]:
             assert distractor_id not in claim.get("evidence_ids", []), (
                 f"{case.case_id}: claim cited distractor"
             )
+
+
+def test_adversarial_adapter_does_not_launder_a_winning_distractor():
+    corpus = [
+        {
+            "chunk_id": "gold",
+            "content": "Unrelated background.",
+            "metadata": {},
+        },
+        {
+            "chunk_id": "distractor:winning",
+            "content": "Neo4j uses SQL as its query language.",
+            "metadata": {"is_distractor": True},
+            "node_id": "trap-node",
+        },
+    ]
+    out = adversarial_orchestrator_adapter("Which query language does Neo4j use?", corpus)
+    assert "distractor:winning" in out["cited_chunk_ids"]
+    assert any("distractor:winning" in claim.get("evidence_ids", []) for claim in out["claims"])
