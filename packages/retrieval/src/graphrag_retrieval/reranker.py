@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from importlib import import_module
+from typing import Any, Protocol, cast
 
 from .base import RetrievalHit, _normalise_hit
 
@@ -21,6 +22,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "BAAI/bge-reranker-v2-m3"
 
 Scorer = Callable[[str, Sequence[str]], list[float]]
+
+
+class RerankerModel(Protocol):
+    def compute_score(
+        self, pairs: Sequence[Sequence[str]], *, normalize: bool
+    ) -> float | Sequence[float]: ...
 
 
 class BGEReranker:
@@ -38,18 +45,22 @@ class BGEReranker:
         self.batch_size = batch_size
         self.use_fp16 = use_fp16
         self._scorer = scorer
-        self._model = None
+        self._model: RerankerModel | None = None
 
-    def _load(self):
+    def _load(self) -> RerankerModel:
         if self._model is not None:
             return self._model
         try:
-            from FlagEmbedding import FlagReranker
-        except ImportError as e:
+            module = import_module("FlagEmbedding")
+            model_class = module.FlagReranker
+        except (ImportError, AttributeError) as e:
             raise RuntimeError(
                 "BGEReranker requires FlagEmbedding. Install with 'graphrag-retrieval[rerank]'."
             ) from e
-        self._model = FlagReranker(self.model_name, use_fp16=self.use_fp16)
+        self._model = cast(
+            RerankerModel,
+            model_class(self.model_name, use_fp16=self.use_fp16),
+        )
         return self._model
 
     def _score(self, query: str, contents: Sequence[str]) -> list[float]:
@@ -83,10 +94,22 @@ class BGEReranker:
             logger.exception("rerank failed; returning input slice")
             return [_normalise_hit(hit) for hit in hits[:top_k]]
 
+        if len(scores) != len(hits):
+            logger.error(
+                "reranker returned %d scores for %d hits; returning input slice",
+                len(scores),
+                len(hits),
+            )
+            return [_normalise_hit(hit) for hit in hits[:top_k]]
+
         scored: list[RetrievalHit] = []
         for hit, s in zip(hits, scores):
             h = _normalise_hit(hit)
             h["rerank_score"] = float(s)
             scored.append(h)
-        scored.sort(key=lambda h: h.get("rerank_score") or 0.0, reverse=True)
+        def rerank_value(hit: RetrievalHit) -> float:
+            score = hit.get("rerank_score")
+            return float(score) if score is not None else 0.0
+
+        scored.sort(key=rerank_value, reverse=True)
         return scored[:top_k]

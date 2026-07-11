@@ -4,9 +4,21 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from importlib import import_module
+from typing import Any, Protocol, cast
 
 logger = logging.getLogger(__name__)
+
+
+class EvaluateFn(Protocol):
+    def __call__(
+        self,
+        dataset: list[dict[str, object]],
+        *,
+        metrics: Sequence[str],
+        llm: Any | None,
+        embeddings: Any | None,
+    ) -> Any: ...
 
 
 @dataclass
@@ -15,7 +27,7 @@ class EvalSample:
     answer: str
     contexts: list[str]
     ground_truth: str | None = None
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class RagasRunner:
@@ -36,23 +48,24 @@ class RagasRunner:
             "context_recall",
             "faithfulness",
         ),
-        evaluate_fn: Any | None = None,
+        evaluate_fn: EvaluateFn | None = None,
     ) -> None:
         self.llm = llm
         self.embeddings = embeddings
         self.metric_names = list(metric_names)
         self._evaluate_fn = evaluate_fn
 
-    def _load_evaluate(self):
+    def _load_evaluate(self) -> EvaluateFn:
         if self._evaluate_fn is not None:
             return self._evaluate_fn
         try:
-            from ragas import evaluate as _ragas_evaluate
-        except ImportError as e:
+            module = import_module("ragas")
+            evaluate = module.evaluate
+        except (ImportError, AttributeError) as e:
             raise RuntimeError(
                 "RagasRunner requires ragas. Install with 'graphrag-eval[ragas]'."
             ) from e
-        return _ragas_evaluate
+        return cast(EvaluateFn, evaluate)
 
     def run(self, samples: Sequence[EvalSample]) -> dict[str, float]:
         if not samples:

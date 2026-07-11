@@ -41,3 +41,16 @@ def test_rerank_topk_truncation():
 def test_rerank_empty_input():
     reranker = BGEReranker(scorer=lambda q, contents: [])
     assert reranker.rerank("q", [], top_k=5) == []
+
+
+def test_rerank_falls_back_when_scorer_returns_wrong_count():
+    hits = [
+        {"chunk_id": "a", "source": "vector", "score": 0.9, "content": "a", "metadata": {}},
+        {"chunk_id": "b", "source": "vector", "score": 0.8, "content": "b", "metadata": {}},
+    ]
+    reranker = BGEReranker(scorer=lambda q, contents: [0.1])
+
+    result = reranker.rerank("q", hits, top_k=2)
+
+    assert [hit["chunk_id"] for hit in result] == ["a", "b"]
+    assert all("rerank_score" not in hit for hit in result)

@@ -73,6 +73,8 @@ indent-style = "space"
 [tool.pyright]
 include = ["apps", "packages"]
 exclude = ["**/node_modules", "**/__pycache__", "**/.venv", "backend", "frontend", "eval"]
+venvPath = "."
+venv = ".venv"
 extraPaths = [
   "apps/api/src",
   "packages/eval/src",
