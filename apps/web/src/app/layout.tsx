@@ -1,19 +1,19 @@
-import type { Metadata } from "next"
-import "./globals.css"
+import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GraphRAG Copilot",
-  description: "Agentic GraphRAG with full retrieval traces.",
-}
+	title: "GraphRAG Copilot",
+	description: "Agentic GraphRAG with full retrieval traces.",
+};
 
 export default function RootLayout({
-  children,
+	children,
 }: {
-  children: React.ReactNode
+	children: React.ReactNode;
 }) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  )
+	return (
+		<html lang="en">
+			<body>{children}</body>
+		</html>
+	);
 }
