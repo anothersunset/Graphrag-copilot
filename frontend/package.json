@@ -2,6 +2,7 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "description": "Deprecated v1 demonstration UI; the supported frontend is apps/web",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -1,11 +1,18 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type {
+  ForceGraphMethods,
+  GraphData as ForceGraphData,
+  LinkObject,
+  NodeObject,
+} from "react-force-graph-2d";
 import { useEffect, useRef, useState, useMemo, useCallback, CSSProperties } from "react";
 import { API_BASE } from "@/lib/api";
 import ControlPanel from "./ControlPanel";
 import {
   GraphData,
+  GraphLink,
   GraphNode,
   GraphSettings,
   DEFAULT_SETTINGS,
@@ -13,7 +20,9 @@ import {
   EntityNeighborsResponse,
 } from "./types";
 
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
+const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
+  ssr: false,
+}) as typeof import("react-force-graph-2d").default;
 
 export const TYPE_COLOR: Record<string, string> = {
   Technology: "#7C5CFF",
@@ -143,24 +152,21 @@ const DETAIL_ITEM_META_STYLE: CSSProperties = {
 };
 
 export default function GraphPage() {
-  const fgRef = useRef<any>(null);
+  const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined);
   const [data, setData] = useState<GraphData>({ nodes: [], links: [], status: "" });
   const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
   const [query, setQuery] = useState("");
-  const [settings, setSettings] = useState<GraphSettings>(DEFAULT_SETTINGS);
-  const [detailEntity, setDetailEntity] = useState<EntityNeighborsResponse | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-
-  // 读取本地保存的设置
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  const [settings, setSettings] = useState<GraphSettings>(() => {
+    if (typeof window === "undefined") return DEFAULT_SETTINGS;
     try {
       const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-      if (raw) setSettings(Object.assign({}, DEFAULT_SETTINGS, JSON.parse(raw)));
+      return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : DEFAULT_SETTINGS;
     } catch {
-      /* ignore */
+      return DEFAULT_SETTINGS;
     }
-  }, []);
+  });
+  const [detailEntity, setDetailEntity] = useState<EntityNeighborsResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // 持久化设置
   useEffect(() => {
@@ -185,7 +191,8 @@ export default function GraphPage() {
   }, []);
 
   useEffect(() => {
-    fetchGraph();
+    const timer = window.setTimeout(() => void fetchGraph(), 0);
+    return () => window.clearTimeout(timer);
   }, [fetchGraph]);
 
   // 实时应用力度参数
@@ -219,8 +226,8 @@ export default function GraphPage() {
     if (!settings.showOrphans) nodes = nodes.filter((n) => (n.degree ?? 0) > 0);
     const keep = new Set(nodes.map((n) => n.id));
     const links = data.links.filter((l) => {
-      const s = typeof l.source === "object" ? (l.source as any).id : l.source;
-      const t = typeof l.target === "object" ? (l.target as any).id : l.target;
+      const s = typeof l.source === "object" ? l.source.id : l.source;
+      const t = typeof l.target === "object" ? l.target.id : l.target;
       return keep.has(s) && keep.has(t);
     });
     return { nodes, links, status: data.status };
@@ -230,8 +237,8 @@ export default function GraphPage() {
   const neighbors = useMemo(() => {
     const m = new Map<string, Set<string>>();
     filteredData.links.forEach((l) => {
-      const s = typeof l.source === "object" ? (l.source as any).id : l.source;
-      const t = typeof l.target === "object" ? (l.target as any).id : l.target;
+      const s = typeof l.source === "object" ? l.source.id : l.source;
+      const t = typeof l.target === "object" ? l.target.id : l.target;
       if (!m.has(s)) m.set(s, new Set());
       if (!m.has(t)) m.set(t, new Set());
       m.get(s)!.add(t);
@@ -291,7 +298,7 @@ export default function GraphPage() {
   // 单击居中聚焦,双击跳转/打开详情
   const lastClickRef = useRef<{ id: string; t: number }>({ id: "", t: 0 });
   const handleNodeClick = useCallback(
-    (node: any) => {
+    (node: NodeObject<GraphNode>) => {
       fgRef.current?.centerAt(node.x, node.y, 600);
       fgRef.current?.zoom(2.2, 600);
       const now = Date.now();
@@ -375,8 +382,13 @@ export default function GraphPage() {
                   <li
                     key={n.name}
                     onClick={() => {
-                      const target = filteredData.nodes.find((x) => x.id === n.name) as any;
-                      if (target && fgRef.current && target.x !== undefined) {
+      const target = filteredData.nodes.find((x) => x.id === n.name) as NodeObject<GraphNode> | undefined;
+                      if (
+                        target &&
+                        fgRef.current &&
+                        typeof target.x === "number" &&
+                        typeof target.y === "number"
+                      ) {
                         fgRef.current.centerAt(target.x, target.y, 600);
                         fgRef.current.zoom(2.4, 600);
                       }
@@ -399,27 +411,28 @@ export default function GraphPage() {
             {data.status === "disconnected" ? "Neo4j 未连接" : "加载图谱数据中..."}
           </div>
         ) : (
-          <ForceGraph2D
+          <ForceGraph2D<GraphNode, GraphLink>
             ref={fgRef}
-            graphData={filteredData as any}
+            graphData={filteredData as ForceGraphData<GraphNode, GraphLink>}
             backgroundColor="#0b0b0f"
             nodeRelSize={settings.nodeSize}
-            nodeVal={(n: any) => Math.max(2, n.degree ?? 1)}
-            nodeColor={(n: any) => TYPE_COLOR[n.type] ?? "#888"}
-            nodeLabel={(n: any) => `${n.label}（${n.type} | 度数: ${n.degree}）`}
+            nodeVal={(n: NodeObject<GraphNode>) => Math.max(2, n.degree ?? 1)}
+            nodeColor={(n: NodeObject<GraphNode>) => TYPE_COLOR[n.type] ?? "#888"}
+            nodeLabel={(n: NodeObject<GraphNode>) => `${n.label}（${n.type} | 度数: ${n.degree}）`}
             nodeCanvasObjectMode={() => "after"}
-            nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, scale: number) => {
-              if (!isFinite(node.x) || !isFinite(node.y)) return;
+            nodeCanvasObject={(node: NodeObject<GraphNode>, ctx: CanvasRenderingContext2D, scale: number) => {
+              const { x, y } = node;
+              if (typeof x !== "number" || typeof y !== "number" || !isFinite(x) || !isFinite(y)) return;
               const r = Math.max(2, node.degree ?? 1) * 1.2;
               const highlighted = isHighlighted(node.id);
               if (highlighted) {
                 const color = TYPE_COLOR[node.type] ?? "#fff";
-                const grad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r * 4);
+                const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
                 grad.addColorStop(0, color + "66");
                 grad.addColorStop(1, "transparent");
                 ctx.fillStyle = grad;
                 ctx.beginPath();
-                ctx.arc(node.x, node.y, r * 4, 0, 2 * Math.PI);
+                ctx.arc(x, y, r * 4, 0, 2 * Math.PI);
                 ctx.fill();
               }
               if (scale > 1.2 || highlighted) {
@@ -428,20 +441,20 @@ export default function GraphPage() {
                 const alpha = highlighted ? 1 : settings.textOpacity;
                 ctx.fillStyle = `rgba(255,255,255,${alpha})`;
                 ctx.textAlign = "center";
-                ctx.fillText(node.label ?? node.id, node.x, node.y + r + 10 / scale);
+                ctx.fillText(node.label ?? String(node.id), x, y + r + 10 / scale);
               }
             }}
-            linkColor={(l: any) => {
+            linkColor={(l: LinkObject<GraphNode, GraphLink>) => {
               const sid = typeof l.source === "object" ? l.source.id : l.source;
               const tid = typeof l.target === "object" ? l.target.id : l.target;
               if (!hoverNode) return "rgba(255,255,255,0.12)";
               const on = sid === hoverNode.id || tid === hoverNode.id;
               return on ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.06)";
             }}
-            linkWidth={(l: any) => (l.weight ?? 0.5) * settings.linkWidth}
+            linkWidth={(l: LinkObject<GraphNode, GraphLink>) => (l.weight ?? 0.5) * settings.linkWidth}
             linkDirectionalArrowLength={settings.showArrows ? 6 : 0}
             linkDirectionalArrowRelPos={1}
-            linkDirectionalParticles={(l: any) => {
+            linkDirectionalParticles={(l: LinkObject<GraphNode, GraphLink>) => {
               if (!hoverNode) return 0;
               const sid = typeof l.source === "object" ? l.source.id : l.source;
               const tid = typeof l.target === "object" ? l.target.id : l.target;
@@ -451,7 +464,7 @@ export default function GraphPage() {
             d3AlphaDecay={0.02}
             d3VelocityDecay={0.3}
             cooldownTicks={120}
-            onNodeHover={(n: any) => setHoverNode(n)}
+            onNodeHover={(n: NodeObject<GraphNode> | null) => setHoverNode(n)}
             onNodeClick={handleNodeClick}
           />
         )}

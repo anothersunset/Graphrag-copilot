@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API_BASE } from "@/lib/api";
 
 interface SystemStatus {
@@ -26,9 +26,7 @@ export default function StatusPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { fetchStatus(); }, []);
-
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE}/api/system/status`);
@@ -39,12 +37,17 @@ export default function StatusPage() {
       } else {
         throw new Error("获取状态失败");
       }
-    } catch (err) {
+    } catch {
       setError("无法连接到后端服务，请确保服务已启动");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void fetchStatus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchStatus]);
 
   if (loading) {
     return (
