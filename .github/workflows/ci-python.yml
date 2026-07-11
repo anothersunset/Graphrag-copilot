@@ -21,17 +21,13 @@ concurrency:
   group: ci-python-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  python:
-    name: "py / ${{ matrix.target }}"
+  quality:
+    name: "py / root quality gates"
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - packages/schemas
-          - packages/graph
-          - apps/api
     steps:
       - uses: actions/checkout@v4
 
@@ -41,33 +37,51 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.11
+        run: uv python install 3.12
 
       - name: Install workspace deps
-        run: uv sync --all-packages --dev
+        run: uv sync --all-packages --dev --python 3.12
 
-      - name: Ruff check
-        run: uv run ruff check ${{ matrix.target }}
+      - name: Ruff
+        run: uv run ruff check .
 
       - name: Pyright (basic)
-        run: uv run pyright ${{ matrix.target }}
+        run: uv run pyright
 
-      - name: Pytest with coverage
-        run: |
-          if [ -d "${{ matrix.target }}/tests" ]; then
-            uv run --directory ${{ matrix.target }} \
-              pytest -ra --cov --cov-report=xml --cov-report=term-missing
-          else
-            echo "no tests in ${{ matrix.target }}; skipping pytest"
-          fi
+      - name: Collect all tests together
+        run: uv run pytest --collect-only -q
 
-      - name: Upload coverage
-        if: always()
-        uses: actions/upload-artifact@v4
+  tests:
+    name: "pytest / ${{ matrix.test_path }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test_path:
+          - apps/api/tests
+          - packages/eval/tests
+          - packages/graph/tests
+          - packages/kg/tests
+          - packages/observability/tests
+          - packages/parsers/tests
+          - packages/retrieval/tests
+          - packages/schemas/tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
         with:
-          name: coverage-${{ replace(matrix.target, '/', '-') }}
-          path: ${{ matrix.target }}/coverage.xml
-          if-no-files-found: ignore
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install workspace deps
+        run: uv sync --all-packages --dev --python 3.12
+
+      - name: Run package tests
+        run: uv run pytest ${{ matrix.test_path }} -q
 
   legacy-backend-syntax:
     name: "py / backend syntax gate"
@@ -78,7 +92,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Compile legacy backend sources
         run: |

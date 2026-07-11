@@ -1,100 +1,101 @@
 # GraphRAG Copilot
 
-企业知识库场景下的 Agentic GraphRAG 项目。当前主分支处于 **v3.1 迁移期**：
+面向企业知识库的 Agentic GraphRAG。当前正式开发入口是 v3.x monorepo：
 
-- 默认开发栈：`apps/api` + `apps/web` + `packages/*`
-- 兼容保留：`backend/` + `frontend/`（legacy v1）
+- API：`apps/api`（FastAPI + MCP）
+- Web：`apps/web`（Next.js 15 + React 19）
+- 核心包：`packages/*`
+- 兼容代码：`backend` 与 `frontend`（legacy v1，不是默认入口）
 
-## 当前推荐入口（v3.1）
+## 环境要求
 
-### 1) 安装依赖
+- Python 3.12+
+- Node.js 22+
+- uv
+- pnpm 9.12.0（版本记录在根 `package.json`）
+
+## 快速开始
+
+安装根工作区依赖：
 
 ```bash
 make install
 ```
 
-### 2) 启动服务
+分别启动 API 与 Web：
 
 ```bash
-make api   # http://localhost:8000
-make web   # http://localhost:3000
+make api  # http://127.0.0.1:8000
+make web  # http://127.0.0.1:3000
 ```
 
-也可以并行启动：
+或在支持并行 make 的环境中运行：
 
 ```bash
 make dev
 ```
 
-### 3) 健康检查
-
-- API liveness: `GET /healthz`
-- API readiness: `GET /readyz`
-
-示例：
+`make api` 默认使用 `demo_docs` 构建可查询的本地索引，因此启动后 readiness 与问答入口可直接验收。生产或自定义语料请覆盖：
 
 ```bash
-curl http://localhost:8000/healthz
-curl http://localhost:8000/readyz
+GRAPHRAG_CORPUS_PATH=/path/to/corpus make api
 ```
 
-## 关键 API（v3.1）
+## 正式 API 契约
 
-- `POST /v1/ask`：主问答入口
-- `POST /v1/mcp`：MCP server 挂载点（由 `apps/api` 提供）
+- `GET /healthz`：进程存活
+- `GET /readyz`：索引与依赖就绪
+- `POST /v1/ask`：同步 GraphRAG 问答
+- `POST /v1/ask/stream`：流式问答
+- `GET /v1/runs/{run_id}`：读取一次运行及引用/审计轨迹
+- `/v1/mcp`：MCP 挂载入口
 
-项目内置 smoke 脚本会检查 `/healthz`、`/readyz` 与 `/v1/ask` 契约：
+运行 canonical smoke：
 
 ```bash
-BASE_URL=http://localhost:8000 python test_api.py
+make smoke
+# 或
+BASE_URL=http://127.0.0.1:8000 uv run python test_api.py
 ```
 
-## 前端 API 地址配置
+如启用 API key，同时设置 `GRAPHRAG_API_KEY`。
 
-前端默认回落到 `http://localhost:8000`。推荐使用：
+## 前端配置
 
-- `NEXT_PUBLIC_API_BASE_URL`（首选）
+浏览器请求默认经由 `apps/web` 的同源 `/api/graphrag/*` 代理到 `http://127.0.0.1:8000`。服务端代理配置：
 
-当前也兼容：
+- `GRAPHRAG_API_URL`：上游 API 地址
+- `GRAPHRAG_API_KEY`：可选上游 API key
 
-- `NEXT_PUBLIC_API_BASE`
-- `NEXT_PUBLIC_API_URL`
+legacy `frontend` 仍兼容 `NEXT_PUBLIC_API_BASE_URL`、`NEXT_PUBLIC_API_URL` 与 `NEXT_PUBLIC_API_BASE`，但不属于默认开发栈。
 
-## Docker 与基础设施说明
-
-### 根目录 `docker-compose.yml`
-
-- 面向 legacy v1 的快速演示编排（`backend/` + `frontend/` + Neo4j）
-- 如只做 v3.1 开发，不建议作为主入口
-
-### `infra/docker/docker-compose.dev.yml`
-
-- 面向 v3.1 的基础设施依赖（Qdrant / Neo4j / Langfuse）
-- 用于本地联调检索、图谱与观测组件
-
-## 常用命令
+## 质量门与确定性评测
 
 ```bash
 make test
 make lint
-make fmt
 make typecheck
-make ci-activate
+pnpm build
+uv run --package graphrag-eval python -m graphrag_eval.bench --strict
 ```
 
-`make ci-activate` 会把 `infra/workflows-template/*.yml.tmpl` 渲染到 `.github/workflows/`。
+确定性评测覆盖 required answer points、Retrieval Recall@5、citation precision/recall/validity、Provenance Sufficiency 与 adversarial distractor 指标；不依赖 LLM、向量库或图数据库。
 
-## 迁移状态
+## 依赖与 CI
 
-- 迁移决策：`docs/adr/0001-from-v1-to-v3.1.md`
-- 路线图：`docs/architecture/migration-roadmap.md`
-- v3.1 规格：`docs/architecture/v3.1-final-spec.md`
+- JavaScript 工作区只使用根 `pnpm-lock.yaml`；CI 采用 frozen install。
+- Python CI 固定 3.12，先运行根 Ruff/Pyright/全仓测试收集，再按实际包执行测试矩阵。
+- workflow 模板位于 `infra/workflows-template`，修改后用 `make ci-activate` 同步到 `.github/workflows`。
 
-## Operational probes
-- `/health` is the liveness probe and returns 200 when the API process is up.
-- `/readyz` is the readiness probe and returns dependency details for vector, BM25, graph, embedding, and observability state.
-- `test_api.py` is the local smoke runner. It checks liveness, readiness, system status, vector stats, graph stats, query, document upload, auth, and rate limiting.
-- Frontend API base URL resolution order is `NEXT_PUBLIC_API_BASE_URL`, then `NEXT_PUBLIC_API_URL`, then `NEXT_PUBLIC_API_BASE`, then `http://localhost:8000`.
+## Docker 与 legacy
+
+根 `docker-compose.yml` 仍用于 legacy v1 演示（`backend` + `frontend` + Neo4j）；legacy Web 已纳入根 pnpm 单锁。v3.x 基础设施依赖位于 `infra/docker/docker-compose.dev.yml`。
+
+迁移背景见：
+
+- `docs/adr/0001-from-v1-to-v3.1.md`
+- `docs/architecture/migration-roadmap.md`
+- `docs/architecture/v3.1-final-spec.md`
 
 ## License
 

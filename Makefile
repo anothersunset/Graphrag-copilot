@@ -1,17 +1,22 @@
 .PHONY: help install dev test lint fmt typecheck clean api web docker-build ci-activate smoke
 
+GRAPHRAG_CORPUS_PATH ?= demo_docs
+BASE_URL ?= http://127.0.0.1:8000
+export GRAPHRAG_CORPUS_PATH
+export BASE_URL
+
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN {FS=":.*?##"} {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 install:  ## Install all deps (uv + pnpm)
 	uv sync --all-packages --dev
-	cd apps/web && pnpm install
+	pnpm install --frozen-lockfile
 
 api:  ## Run FastAPI dev server on :8000
-	cd apps/api && uv run uvicorn graphrag_api.main:app --reload --port 8000
+	uv run --package graphrag-api uvicorn graphrag_api.main:app --reload --port 8000
 
 web:  ## Run Next.js dev server on :3000
-	cd apps/web && pnpm dev
+	pnpm --filter @graphrag/web dev
 
 dev:  ## Run api + web concurrently (requires GNU make)
 	@$(MAKE) -j 2 api web
@@ -21,19 +26,19 @@ test:  ## Run all Python tests with coverage
 
 lint:  ## Lint Python (ruff) + frontend (biome)
 	uv run ruff check .
-	cd apps/web && pnpm biome check src
+	pnpm lint
 
 fmt:  ## Format Python (ruff) + frontend (biome)
 	uv run ruff format .
 	uv run ruff check --fix .
-	cd apps/web && pnpm biome format --write src
+	pnpm format
 
 typecheck:  ## Run pyright + tsc
 	uv run pyright
-	cd apps/web && pnpm typecheck
+	pnpm typecheck
 
 smoke:  ## Run API smoke checks against BASE_URL (default http://localhost:8000)
-	python test_api.py
+	uv run python test_api.py
 
 docker-build:  ## Build api + web Docker images
 	docker compose build
