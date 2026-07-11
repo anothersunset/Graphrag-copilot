@@ -15,5 +15,10 @@
     "typecheck": "pnpm -r --filter @graphrag/web typecheck",
     "format": "pnpm -r --filter @graphrag/web format"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "pnpm": {
+    "overrides": {
+      "postcss": "8.5.16"
+    }
+  }
 }

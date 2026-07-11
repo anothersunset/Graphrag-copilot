@@ -1,2 +1,8 @@
 packages:
   - apps/web
+  - frontend
+
+# pnpm 11 reads overrides here; pnpm 9 CI reads the mirrored package.json
+# setting. Keep both until the repository upgrades its pinned pnpm version.
+overrides:
+  postcss: 8.5.16
