@@ -1,159 +1,148 @@
-"use client";
+"use client"
 
-import { AgentFlow } from "@/components/flow/AgentFlow";
-import { type RunResponse, type StreamEvent, ask, askStream } from "@/lib/api";
-import { useCallback, useRef, useState } from "react";
+import { AgentFlow } from "@/components/flow/AgentFlow"
+import { type RunResponse, type StreamEvent, ask, askStream } from "@/lib/api"
+import { useCallback, useRef, useState } from "react"
 
 export default function HomePage() {
-	const [query, setQuery] = useState("");
-	const [answer, setAnswer] = useState("");
-	const [runData, setRunData] = useState<RunResponse | null>(null);
-	const [loading, setLoading] = useState(false);
-	const [streaming, setStreaming] = useState(false);
-	const [showTrace, setShowTrace] = useState(false);
-	const abortRef = useRef<AbortController | null>(null);
+  const [query, setQuery] = useState("")
+  const [answer, setAnswer] = useState("")
+  const [runData, setRunData] = useState<RunResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [streaming, setStreaming] = useState(false)
+  const [showTrace, setShowTrace] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
 
-	const handleSubmit = useCallback(
-		async (e: React.FormEvent) => {
-			e.preventDefault();
-			if (!query.trim() || loading) return;
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (!query.trim() || loading) return
 
-			setLoading(true);
-			setAnswer("");
-			setRunData(null);
-			setShowTrace(false);
+      setLoading(true)
+      setAnswer("")
+      setRunData(null)
+      setShowTrace(false)
 
-			try {
-				const result = await ask(query.trim());
-				setAnswer(result.answer);
-				setRunData(result);
-			} catch (err) {
-				setAnswer(`Error: ${err instanceof Error ? err.message : String(err)}`);
-			} finally {
-				setLoading(false);
-			}
-		},
-		[query, loading],
-	);
+      try {
+        const result = await ask(query.trim())
+        setAnswer(result.answer)
+        setRunData(result)
+      } catch (err) {
+        setAnswer(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [query, loading],
+  )
 
-	const handleStream = useCallback(async () => {
-		if (!query.trim() || streaming) return;
+  const handleStream = useCallback(async () => {
+    if (!query.trim() || streaming) return
 
-		setStreaming(true);
-		setAnswer("");
-		setRunData(null);
-		setShowTrace(false);
+    setStreaming(true)
+    setAnswer("")
+    setRunData(null)
+    setShowTrace(false)
 
-		const tokens: string[] = [];
+    const tokens: string[] = []
 
-		try {
-			await askStream(query.trim(), (event: StreamEvent) => {
-				if (event.type === "token" && event.text) {
-					tokens.push(event.text);
-					setAnswer(tokens.join(""));
-				} else if (event.type === "done") {
-					if (event.data) {
-						setRunData(event.data);
-						setAnswer(event.data.answer);
-					}
-				} else if (event.type === "error") {
-					throw new Error(event.error ?? "stream failed");
-				}
-			});
-		} catch (err) {
-			setAnswer(`Error: ${err instanceof Error ? err.message : String(err)}`);
-		} finally {
-			setStreaming(false);
-		}
-	}, [query, streaming]);
+    try {
+      await askStream(query.trim(), (event: StreamEvent) => {
+        if (event.type === "token" && event.text) {
+          tokens.push(event.text)
+          setAnswer(tokens.join(""))
+        } else if (event.type === "done") {
+          if (event.data) {
+            setRunData(event.data)
+            setAnswer(event.data.answer)
+          }
+        } else if (event.type === "error") {
+          throw new Error(event.error ?? "stream failed")
+        }
+      })
+    } catch (err) {
+      setAnswer(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setStreaming(false)
+    }
+  }, [query, streaming])
 
-	return (
-		<main className="min-h-screen bg-background">
-			<div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-				<h1 className="text-2xl font-bold mb-6">GraphRAG Copilot</h1>
+  return (
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
+        <h1 className="text-2xl font-bold mb-6">GraphRAG Copilot</h1>
 
-				<form
-					onSubmit={handleSubmit}
-					className="mb-6 flex flex-col gap-2 sm:flex-row"
-				>
-					<input
-						type="text"
-						aria-label="GraphRAG question"
-						value={query}
-						onChange={(e) => setQuery(e.target.value)}
-						placeholder="输入问题..."
-						className="min-w-0 flex-1 rounded-lg border bg-card px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-						disabled={loading || streaming}
-					/>
-					<button
-						type="submit"
-						disabled={loading || streaming || !query.trim()}
-						className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						{loading ? "查询中..." : "查询"}
-					</button>
-					<button
-						type="button"
-						onClick={handleStream}
-						disabled={loading || streaming || !query.trim()}
-						className="rounded-lg border bg-card px-4 py-2 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						{streaming ? "流式中..." : "流式"}
-					</button>
-				</form>
+        <form onSubmit={handleSubmit} className="mb-6 flex flex-col gap-2 sm:flex-row">
+          <input
+            type="text"
+            aria-label="GraphRAG question"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="输入问题..."
+            className="min-w-0 flex-1 rounded-lg border bg-card px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            disabled={loading || streaming}
+          />
+          <button
+            type="submit"
+            disabled={loading || streaming || !query.trim()}
+            className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "查询中..." : "查询"}
+          </button>
+          <button
+            type="button"
+            onClick={handleStream}
+            disabled={loading || streaming || !query.trim()}
+            className="rounded-lg border bg-card px-4 py-2 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {streaming ? "流式中..." : "流式"}
+          </button>
+        </form>
 
-				{answer && (
-					<div
-						className="mb-6 rounded-lg border bg-card p-4"
-						aria-live="polite"
-					>
-						<h2 className="text-sm font-semibold text-muted-foreground mb-2">
-							回答
-						</h2>
-						<div className="text-sm whitespace-pre-wrap">{answer}</div>
-					</div>
-				)}
+        {answer && (
+          <div className="mb-6 rounded-lg border bg-card p-4" aria-live="polite">
+            <h2 className="text-sm font-semibold text-muted-foreground mb-2">回答</h2>
+            <div className="text-sm whitespace-pre-wrap">{answer}</div>
+          </div>
+        )}
 
-				{runData && (
-					<>
-						<div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-							<span>置信度: {(runData.confidence * 100).toFixed(0)}%</span>
-							<span>CRAG: {runData.crag_decision}</span>
-							<span>Auditor: {runData.verdict}</span>
-							<button
-								type="button"
-								onClick={() => setShowTrace(!showTrace)}
-								className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:ml-auto"
-							>
-								{showTrace ? "隐藏流程图" : "查看流程图"}
-							</button>
-						</div>
+        {runData && (
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              <span>置信度: {(runData.confidence * 100).toFixed(0)}%</span>
+              <span>CRAG: {runData.crag_decision}</span>
+              <span>Auditor: {runData.verdict}</span>
+              <button
+                type="button"
+                onClick={() => setShowTrace(!showTrace)}
+                className="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:ml-auto"
+              >
+                {showTrace ? "隐藏流程图" : "查看流程图"}
+              </button>
+            </div>
 
-						{runData.sources.length > 0 && (
-							<div className="mb-6 rounded-lg border bg-card p-4">
-								<h2 className="text-sm font-semibold text-muted-foreground mb-2">
-									来源 ({runData.sources.length})
-								</h2>
-								<ul className="space-y-2">
-									{runData.sources.map((s, i) => (
-										<li
-											key={s.chunk_id ?? i}
-											className="text-xs border rounded-md p-2"
-										>
-											<span className="font-mono text-muted-foreground">
-												{s.source} · score={s.score.toFixed(3)}
-											</span>
-											<p className="mt-1 text-sm">{s.content}</p>
-										</li>
-									))}
-								</ul>
-							</div>
-						)}
+            {runData.sources.length > 0 && (
+              <div className="mb-6 rounded-lg border bg-card p-4">
+                <h2 className="text-sm font-semibold text-muted-foreground mb-2">
+                  来源 ({runData.sources.length})
+                </h2>
+                <ul className="space-y-2">
+                  {runData.sources.map((s, i) => (
+                    <li key={s.chunk_id ?? i} className="text-xs border rounded-md p-2">
+                      <span className="font-mono text-muted-foreground">
+                        {s.source} · score={s.score.toFixed(3)}
+                      </span>
+                      <p className="mt-1 text-sm">{s.content}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-						{showTrace && <AgentFlow data={runData} />}
-					</>
-				)}
-			</div>
-		</main>
-	);
+            {showTrace && <AgentFlow data={runData} />}
+          </>
+        )}
+      </div>
+    </main>
+  )
 }
