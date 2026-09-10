@@ -1,6 +1,6 @@
 [project]
 name = "graphrag-graph"
-version = "0.1.0"
+version = "0.1.1"
 description = "LangGraph 7-node Agentic RAG orchestrator for GraphRAG Copilot v3.1."
 readme = "README.md"
 requires-python = ">=3.11"
