@@ -12,6 +12,33 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 
+def _stable_chunk_id(doc: Dict[str, Any]) -> str:
+    """Derive a stable chunk id from document metadata.
+
+    Uploads (``routes.py``) stamp ``metadata["chunk_id"]`` as
+    ``{file_name}#{chunk_index}``. Documents indexed before that field
+    existed fall back to deriving the same format from ``file_name`` +
+    ``chunk_index``, so ids survive re-indexing and are shared across the
+    vector / BM25 routes. Positional ids (``vec-0``) were only unique
+    within a single query result list, which made citation and recall
+    metrics meaningless.
+    """
+    metadata = doc.get("metadata", {}) or {}
+    chunk_id = metadata.get("chunk_id")
+    if chunk_id:
+        return str(chunk_id)
+    file_name = metadata.get("file_name") or metadata.get("stored_file_name") or "unknown"
+    chunk_index = metadata.get("chunk_index")
+    if chunk_index is None:
+        # No stable identity available — degrade to a content digest so the
+        # id is at least deterministic for identical content.
+        import hashlib
+
+        digest = hashlib.md5((doc.get("content") or "").encode("utf-8")).hexdigest()[:12]
+        return f"{file_name}#sha-{digest}"
+    return f"{file_name}#{int(chunk_index)}"
+
+
 class VectorRetriever:
     """FAISS 向量检索适配器."""
 
@@ -21,9 +48,9 @@ class VectorRetriever:
         query_embedding = embedding_service.embed_query(query)
         results = vector_store.search(query_embedding, top_k=top_k)
         hits = []
-        for i, doc in enumerate(results):
+        for doc in results:
             hits.append({
-                "chunk_id": doc.get("metadata", {}).get("chunk_id", f"vec-{i}"),
+                "chunk_id": _stable_chunk_id(doc),
                 "source": "vector",
                 "score": float(doc.get("score", 0.0)),
                 "content": doc.get("content", ""),
@@ -40,9 +67,9 @@ class BM25Retriever:
 
         results = bm25_store.search(query, top_k=top_k)
         hits = []
-        for i, doc in enumerate(results):
+        for doc in results:
             hits.append({
-                "chunk_id": doc.get("metadata", {}).get("chunk_id", f"bm25-{i}"),
+                "chunk_id": _stable_chunk_id(doc),
                 "source": "bm25",
                 "score": float(doc.get("score", 0.0)),
                 "content": doc.get("content", ""),

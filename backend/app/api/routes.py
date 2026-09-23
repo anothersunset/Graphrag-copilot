@@ -114,6 +114,7 @@ async def upload_document(file: UploadFile = File(...), background_tasks: Backgr
                     "file_name": file.filename,
                     "stored_file_name": safe_name,
                     "chunk_index": i,
+                    "chunk_id": f"{file.filename}#{i}",
                     "file_hash": doc_result.get("file_hash"),
                     "source_type": doc_result.get("file_type", suffix),
                 },

@@ -245,6 +245,50 @@ class QueryResult:
 
 > **评测环境**: mimo-v2.5-pro, 50 题 benchmark, 2026-06-09
 
+### 6.0.0 gold ID 映射修复与离线检索基线（2026-09-23，backlog P0-2）
+
+修复前 Recall@5 / Citation Recall 恒为 0 的根因是**三层断链**：
+
+1. **入库无稳定 ID**：上传/索引路径的 chunk metadata 没有 `chunk_id` 字段，
+   检索适配器回退到位置 ID（`vec-0`，仅单次查询内唯一）；
+2. **评测客户端读错字段**：`eval/graphrag_client.py` 从 `sources[*].metadata.chunk_id`
+   取 ID（从未设置），而 orchestrator 实际把 `chunk_id` 放在 source 顶层；
+   `citations` 收集的是检索路由名（"vector"/"bm25"）而非引用 chunk ID；
+3. **gold 是语义 ID**：数据集 `gold_context_ids` 是 34 个语义模块 ID
+   （`arch-vector-store` 等），与真实 chunk 无映射。
+
+修复内容：
+
+- `backend/app/agents/retriever_adapters.py` 新增 `_stable_chunk_id()`：
+  从 `file_name` + `chunk_index` 派生稳定 ID（`{file_name}#{chunk_index}`），
+  vector/BM25 两路共享同一格式；上传路径（`routes.py`）同步写入该字段。
+- `eval/graphrag_client.py`：`retrieved_ids` 改读 source 顶层 `chunk_id`
+  （兼容 metadata 回退）；`citations` 改读响应顶层 `citations[*].chunk_id`。
+- `eval/datasets/gold_context_map.json`：人工通读 60 个 chunk 后标注的
+  34 个语义 ID → 真实 chunk ID 映射；`eval/metrics.py` 计算检索指标前
+  展开 gold；`eval/tests/test_gold_map.py` 校验映射覆盖全部数据集的
+  gold ID 且映射目标存在于真实语料（缺一即测试失败）。
+
+离线重跑基线（无 LLM key、BM25 路、50 题，`--no-judge` 关键词口径；
+结果文件 `eval/results/real_eval_baseline_offline_2026-09-23.json`）：
+
+| 指标 | 修复前 | 修复后（离线基线） | 说明 |
+|------|--------|-------------------|------|
+| Recall@5 | 0.0000（恒 0） | **0.4716** | 45/50 题 > 0 |
+| Citation Recall | 0.0000（恒 0） | 0.1200 | 离线拒答路径无引用，LLM 接通后才有意义 |
+| Answer Accuracy | 0.7164（LLM 口径） | 0.1233 | 离线 generator 拒答所致，**非可比口径** |
+| Trace Completeness | 0.9920 | 0.9920 | 链路指标不受影响 |
+
+按题型拆分（离线基线 Recall@5）：factual 0.625 / relational 0.483 /
+multihop 0.295 / crossdoc 0.171 / boundary 1.000（gold 为空按约定计满）。
+crossdoc 仍是检索短板，与 §6.0.2 的历史观察一致。
+
+**口径声明**：本基线是**离线检索口径**——衡量的是检索层命中 gold chunk
+的能力，不含 LLM 生成质量；答案类指标需接 DeepSeek key 后重跑
+（见 backlog P2-6）。语义 ID 存在多文档归属（如 `config-neo4j` 的内容
+同时出现在 `knowledge_graph.md#0` 与 `config_all#4/5`），当前映射取
+语义主归属，逐题精度可在人工抽检（backlog P2-6）中细化。
+
 ### 6.0 LangGraph 5 节点流水线评测（2026-06-10）
 
 后端已接入 packages/graph 的 LangGraph 流水线，使用 50 题 benchmark 完整评测。

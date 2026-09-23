@@ -76,7 +76,7 @@ def smoke_test(base_url: str):
         return False
 
 
-def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
+def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0, out_file: str = "eval/results/real_eval_results.json"):
     """运行真实评测."""
     # 配置日志
     log_dir = Path("eval/results")
@@ -178,10 +178,10 @@ def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
             avg_faith = sum(r["faithfulness"] for r in type_results) / len(type_results)
             log.info("%-12s %-12.4f %-15.4f %-8d", qtype, avg_acc, avg_faith, len(type_results))
 
-    # 保存结果
-    out_file = Path("eval/results/real_eval_results.json")
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_file, "w", encoding="utf-8") as f:
+    # 保存结果（默认路径保持向后兼容；重跑基线请显式传 --out 新文件）
+    out_path = Path(out_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
         json.dump({
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "base_url": base_url,
@@ -189,7 +189,7 @@ def run_real_eval(base_url: str, use_llm: bool = False, max_cases: int = 0):
             "elapsed": elapsed,
             "results": results,
         }, f, ensure_ascii=False, indent=2, default=str)
-    log.info("Results saved to: %s", out_file)
+    log.info("Results saved to: %s", out_path)
     log.info("Log saved to: %s", log_file)
 
 
@@ -200,6 +200,7 @@ def main():
     parser.add_argument("--cases", type=int, default=0, help="限制用例数")
     parser.add_argument("--llm", action="store_true", help="使用 LLM Judge 计算 faithfulness")
     parser.add_argument("--base-url", default="http://localhost:8000", help="后端 API 地址")
+    parser.add_argument("--out", default="eval/results/real_eval_results.json", help="结果输出文件（重跑请指向新文件）")
 
     args = parser.parse_args()
 
@@ -208,7 +209,7 @@ def main():
         sys.exit(0 if success else 1)
     else:
         max_cases = args.cases if args.cases > 0 else (50 if args.full else 10)
-        run_real_eval(args.base_url, use_llm=args.llm, max_cases=max_cases)
+        run_real_eval(args.base_url, use_llm=args.llm, max_cases=max_cases, out_file=args.out)
 
 
 if __name__ == "__main__":

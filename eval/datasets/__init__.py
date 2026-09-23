@@ -5,10 +5,43 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 from eval.graphrag_client import GoldCase
+
+_GOLD_MAP_FILE = Path(__file__).parent / "gold_context_map.json"
+
+
+@lru_cache(maxsize=1)
+def load_gold_context_map() -> Dict[str, List[str]]:
+    """Load the semantic-ID -> real chunk-ID map (see gold_context_map.json).
+
+    Returns an empty dict when the map file is absent, so metric code can
+    treat mapping as best-effort; dataset validation is separate and loud.
+    """
+    if not _GOLD_MAP_FILE.exists():
+        return {}
+    with open(_GOLD_MAP_FILE, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+    return {k: list(v) for k, v in raw.items() if not k.startswith("_")}
+
+
+def expand_gold_context_ids(gold_context_ids: List[str]) -> List[str]:
+    """Expand semantic gold ids into real chunk ids via the gold map.
+
+    Unmapped ids pass through unchanged so the metric still sees (and can
+    report) an honest zero rather than silently dropping gold.
+    """
+    mapping = load_gold_context_map()
+    expanded: List[str] = []
+    for gid in gold_context_ids:
+        if gid in mapping:
+            expanded.extend(mapping[gid])
+        else:
+            expanded.append(gid)
+    return expanded
 
 
 def load_benchmark(path: str) -> List[GoldCase]:

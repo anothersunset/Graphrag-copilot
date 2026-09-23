@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Sequence
 
+from eval.datasets import expand_gold_context_ids
+
 from eval.graphrag_client import GoldCase, QueryResult
 
 
@@ -332,14 +334,17 @@ def compute_metrics(case: GoldCase, result: QueryResult, point_coverage: float =
     Returns:
         包含所有指标的字典
     """
+    # gold 语义 ID 展开为真实 chunk ID（gold_context_map.json）
+    gold_chunk_ids = expand_gold_context_ids(case.gold_context_ids)
+
     return {
         "case_id": case.id,
         "case_type": case.type,
         "difficulty": case.difficulty,
         # 第一层: 检索质量
-        "recall_at_5": recall_at_k(result.retrieved_ids, case.gold_context_ids, k=5),
-        "context_precision": context_precision(result.retrieved_ids, case.gold_context_ids),
-        "citation_recall": citation_recall(result.citations, case.gold_context_ids),
+        "recall_at_5": recall_at_k(result.retrieved_ids, gold_chunk_ids, k=5),
+        "context_precision": context_precision(result.retrieved_ids, gold_chunk_ids),
+        "citation_recall": citation_recall(result.citations, gold_chunk_ids),
         # 第二层: 答案质量
         "answer_accuracy": answer_accuracy(point_coverage),
         "faithfulness": faithfulness(result.answer, result.contexts, use_llm=use_llm),

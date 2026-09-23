@@ -21,23 +21,7 @@
 
 ## P0 — 阻塞基线，最先处理
 
-### 1. 分支处置：提交本次改动并合并回 main
-- **内容**：把「检索栈真实化」改动整理为一个 commit；本地质量门已全绿，
-  推送 `codex/p0-p1-repair`（共 11+ 个提交）并合入 `main`。
-- **为什么是 P0**：后续所有开发的基线不明，拖越久冲突风险越大。
-- **验收**：`main` 上 `make test && make lint && make typecheck` 与
-  bench strict 全绿；远端与本地一致。
-- **说明**：推送远端需要项目负责人确认，这也是它被搁置的唯一原因。
-
-### 2. 修复 gold ID 映射，让 Recall@5 / Citation Recall 恢复真实
-- **问题**：`gold_context_ids` 语义 ID 未映射到真实 chunk_id，
-  检索类指标恒为 0，整个评测体系的检索维度失真。
-- **证据**：`docs/devlog-2026-06-11-benchmark-evaluation.md` §5、
-  `docs/eval-report.md` §6.0.4。
-- **起点文件**：`packages/eval/src/graphrag_eval/bench/reference_runner.py`、
-  `packages/eval/src/graphrag_eval/bench/runner.py`、`eval/metrics.py`。
-- **验收**：50 题 bench 上 Recall@5 > 0（当前恒 0）；修复后重跑
-  `real_eval` 口径基线并回写 `eval/results/`。
+> 2026-09-23：P0 两项已完成，详见文末「已完成」区。P1 顺位上移。
 
 ---
 
@@ -131,6 +115,16 @@ make ingest ARGS="--corpus demo_docs --out-dir data/index --skip-qdrant"  # 灌�
 
 ## 已完成（归档区）
 
+- [x] 2026-09-23 **P0-1 分支处置**：「检索栈真实化」整理为 commit
+  `36511a8` 并 fast-forward 合入本地 `main`；合并后 main 上
+  pytest 235 通过 / 83% 覆盖、ruff + pyright 0 错、bench strict 全绿、
+  biome + tsc 通过（推送远端仍待负责人确认）。
+- [x] 2026-09-23 **P0-2 gold ID 映射修复**：三层断链（入库无稳定
+  chunk_id / 客户端读错字段 / gold 语义 ID 无映射）全部修复；
+  34 个语义 ID 映射经人工通读 60 chunks 标注并有完整性单测守护；
+  50 题离线重跑 Recall@5 = 0.4716（修复前恒 0），45/50 题 > 0；
+  新基线 `eval/results/real_eval_baseline_offline_2026-09-23.json`，
+  历史结果文件未动。详见 `docs/eval-report.md` §6.0.0。
 - [x] 2026-09-23 检索栈真实化第一阶段：可选接线 + 灌库 CLI +
   `/readyz` 如实上报（本文件「当前状态快照」所述质量门全绿）。
 - [x] 2026-07-09 合并核实与 2 处静默 bug 修复（devlog-2026-07-09）。

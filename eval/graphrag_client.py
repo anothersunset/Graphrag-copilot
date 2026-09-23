@@ -114,22 +114,26 @@ def run_query(question: str, config: Dict[str, Any], base_url: str = DEFAULT_BAS
         else:
             crag_decision = "use"
 
-    # 解析 sources 为 contexts 和 citations
+    # 解析 sources 为 contexts / retrieved_ids；citations 读顶层引用列表
+    # 契约（orchestrator._format_response）:
+    #   sources:   [{content, source, score, chunk_id}, ...]  # chunk_id 在顶层
+    #   citations: [{chunk_id, span, confidence}, ...]        # 答案真实引用
     sources = data.get("sources", [])
     contexts = []
-    citations = []
     retrieved_ids = []
     for s in sources:
         content = s.get("content", "")
         if content:
             contexts.append(content)
-        source = s.get("source", "")
-        if source:
-            citations.append(source)
-        # 尝试从 metadata 获取 chunk_id
-        chunk_id = s.get("metadata", {}).get("chunk_id") or s.get("id", "")
+        chunk_id = s.get("chunk_id") or s.get("metadata", {}).get("chunk_id") or s.get("id", "")
         if chunk_id:
             retrieved_ids.append(str(chunk_id))
+
+    citations = [
+        str(c.get("chunk_id", ""))
+        for c in data.get("citations", [])
+        if c.get("chunk_id")
+    ]
 
     return QueryResult(
         answer=data.get("answer", ""),

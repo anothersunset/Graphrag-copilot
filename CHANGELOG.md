@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2026-09-23 backlog P0：基线合并 + 评测检索维度修复
+
+- 🧭 检索栈真实化第一阶段（可选接线 + `make ingest` + `/readyz` 如实上报）合入 `main`
+- 🆔 v1 检索链路稳定 chunk ID：`{file_name}#{chunk_index}`，vector/BM25 共享，上传路径同步落字段
+- 🐛 修复评测客户端字段提取：`retrieved_ids` 恒空与 `citations` 误读路由名（Recall@5 恒 0 的两层根因）
+- 🗺️ 新增 `eval/datasets/gold_context_map.json`：34 个语义 gold ID → 真实 chunk ID 人工标注映射 + 完整性单测
+- 📊 50 题离线重跑：Recall@5 = 0.4716（修复前恒 0），45/50 题 > 0；结果回写 `eval/results/real_eval_baseline_offline_2026-09-23.json`
+- 📝 `docs/eval-report.md` 新增 §6.0.0（根因 + 基线 + 口径声明）；`docs/backlog.md` P0 两项移入已完成区
+
 ### v3.1 渐进重构进行中 (W1-W8 · 2026-05-21 → 2026-07-16)
 
 详细计划见 [docs/adr/0001-from-v1-to-v3.1.md](docs/adr/0001-from-v1-to-v3.1.md) 与
