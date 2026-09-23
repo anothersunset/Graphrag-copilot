@@ -41,6 +41,29 @@ make dev
 GRAPHRAG_CORPUS_PATH=/path/to/corpus make api
 ```
 
+## 检索栈真实化（可选接线）
+
+默认部署只启用内存 KG 两路（PPR + 社区摘要），vector/BM25/reranker/LLM 全部关闭——`/readyz` 的 `dependencies.index.wiring` 会如实上报每个组件的状态。配置以下环境变量即可渐进接入真实栈：
+
+| 组件 | 环境变量 | 说明 |
+|---|---|---|
+| LLM 生成 | `GRAPHRAG_LLM_BASE_URL` / `GRAPHRAG_LLM_API_KEY` / `GRAPHRAG_LLM_MODEL` | 三者齐备才启用（DeepSeek/智谱/vLLM 等 OpenAI 兼容端点） |
+| 向量检索 | `GRAPHRAG_QDRANT_URL` + `GRAPHRAG_EMBEDDING_MODEL` | 需先灌库；`GRAPHRAG_EMBEDDING_DIM` 默认 1024 |
+| BM25 检索 | `GRAPHRAG_BM25_INDEX_PATH` | 指向 ingest 产出的 `bm25.pkl` |
+| Rerank | `GRAPHRAG_RERANKER_MODEL` | 需安装 `graphrag-retrieval[rerank]`（FlagEmbedding） |
+
+灌库 CLI（细粒度分块 → KG → Qdrant 上插 → BM25 持久化，可选 `--neo4j-uri` 导出图谱）：
+
+```bash
+make ingest ARGS="--corpus /path/to/corpus --out-dir data/index"
+# 按产物启动，保证 KG/向量/BM25 服务同一份分块：
+GRAPHRAG_CORPUS_PATH=data/index/chunks.jsonl \
+GRAPHRAG_BM25_INDEX_PATH=data/index/bm25.pkl \
+GRAPHRAG_QDRANT_URL=http://localhost:6333 \
+GRAPHRAG_EMBEDDING_MODEL=BAAI/bge-large-zh-v1.5 \
+make api
+```
+
 ## 正式 API 契约
 
 - `GET /healthz`：进程存活

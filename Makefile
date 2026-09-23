@@ -1,4 +1,4 @@
-.PHONY: help install dev test lint fmt typecheck clean api web docker-build ci-activate smoke
+.PHONY: help install dev test lint fmt typecheck clean api web ingest docker-build ci-activate smoke
 
 GRAPHRAG_CORPUS_PATH ?= demo_docs
 BASE_URL ?= http://127.0.0.1:8000
@@ -14,6 +14,9 @@ install:  ## Install all deps (uv + pnpm)
 
 api:  ## Run FastAPI dev server on :8000
 	uv run --package graphrag-api uvicorn graphrag_api.main:app --reload --port 8000
+
+ingest:  ## Provision retrieval artifacts: make ingest ARGS="--corpus demo_docs"
+	uv run --package graphrag-api python -m graphrag_api.ingest $(ARGS)
 
 web:  ## Run Next.js dev server on :3000
 	pnpm --filter @graphrag/web dev

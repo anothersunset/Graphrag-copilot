@@ -11,6 +11,7 @@
 - [`../README.md`](../README.md) — 项目首页
 - [`../CHANGELOG.md`](../CHANGELOG.md) — 版本变更日志
 - [`../PROJECT_STRUCTURE.md`](../PROJECT_STRUCTURE.md) — v1 项目结构（保留中，W4 末归档）
+- **[backlog.md](backlog.md)** — 待办与交接清单（P0~P3 优先级 + 验收标准，接手先读）
 
 ## 阅读顺序建议（面试官 / 新读者）
 1. 先读项目首页 [`../README.md`](../README.md) 了解项目定位与现状
@@ -18,3 +19,4 @@
 3. 读 [v3.1-final-spec.md](architecture/v3.1-final-spec.md) 看目标架构
 4. 读 [migration-roadmap.md](architecture/migration-roadmap.md) 看 8 周交付节奏
 5. 读 [`../CHANGELOG.md`](../CHANGELOG.md) 看具体每日进展
+6. 读 [backlog.md](backlog.md) 看当前待办与接手切入点

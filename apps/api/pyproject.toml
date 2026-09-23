@@ -17,6 +17,7 @@ dependencies = [
     "graphrag-retrieval",
     "graphrag-observability",
     "graphrag-kg",
+    "graphrag-parsers",
 ]
 
 [project.optional-dependencies]
@@ -35,6 +36,7 @@ graphrag-graph = { workspace = true }
 graphrag-retrieval = { workspace = true }
 graphrag-observability = { workspace = true }
 graphrag-kg = { workspace = true }
+graphrag-parsers = { workspace = true }
 
 [build-system]
 requires = ["hatchling>=1.25"]

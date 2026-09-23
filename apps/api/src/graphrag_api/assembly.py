@@ -20,6 +20,7 @@ indexed.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Any
 
 from graphrag_graph import GraphConfig, build_graph
@@ -65,9 +66,17 @@ def build_orchestrator_from_index(
     query_rewriter: Any = None,
     planner_client: Any = None,
     ppr_kwargs: dict | None = None,
+    generator_model: str | None = None,
 ):
-    """Compile a graph whose KG routes are served by the index."""
+    """Compile a graph whose KG routes are served by the index.
+
+    ``generator_model`` pins the generator (and auditor) to the deployed
+    LLM's model id; the default LiteLLM-style name only makes sense when an
+    actual LiteLLM router is behind ``llm_client``.
+    """
     cfg = config or GraphConfig(enable_global_search=bool(index.communities))
+    if generator_model:
+        cfg = replace(cfg, generator_model=generator_model)
     retrievers = build_retrievers(index, vector=vector, bm25=bm25, ppr_kwargs=ppr_kwargs)
     logger.info(
         "assembled orchestrator: routes=%s communities=%d",

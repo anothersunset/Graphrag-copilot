@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from graphrag_kg import Chunk, build_index
+from graphrag_kg import build_index
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
@@ -19,8 +19,10 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 from graphrag_api import __version__
 from graphrag_api.assembly import build_orchestrator_from_index
 from graphrag_api.config import settings
+from graphrag_api.corpus import load_corpus
 from graphrag_api.mcp.server import mount_mcp
 from graphrag_api.run_store import RunStore
+from graphrag_api.runtime import build_runtime_components
 from graphrag_api.trace.retrieval_trace import RetrievalTraceExporter
 
 
@@ -44,33 +46,6 @@ class AskResponse(BaseModel):
     query_history: list[str] = Field(default_factory=list)
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     evidence_pack: dict[str, Any] | None = None
-
-
-def _load_corpus(path: Path) -> list[Chunk]:
-    if not path.exists():
-        raise FileNotFoundError(f"corpus path does not exist: {path}")
-    files = [path] if path.is_file() else sorted(p for p in path.rglob("*") if p.is_file())
-    chunks: list[Chunk] = []
-    for file in files:
-        suffix = file.suffix.lower()
-        if suffix in {".md", ".txt"}:
-            content = file.read_text(encoding="utf-8").strip()
-            if content:
-                chunks.append(
-                    Chunk(str(file.relative_to(path) if path.is_dir() else file.name), content)
-                )
-        elif suffix == ".jsonl":
-            for line_no, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
-                if not line.strip():
-                    continue
-                row = json.loads(line)
-                content = str(row.get("content") or row.get("text") or "").strip()
-                if content:
-                    chunk_id = str(row.get("chunk_id") or f"{file.name}:{line_no}")
-                    chunks.append(Chunk(chunk_id, content))
-    if not chunks:
-        raise ValueError(f"corpus contains no supported non-empty documents: {path}")
-    return chunks
 
 
 def _source_rows(state: dict[str, Any], cited_ids: set[str]) -> list[dict[str, Any]]:
@@ -110,9 +85,21 @@ def create_app(
             selected_path = corpus_path or settings.corpus_path
             if selected_path is not None:
                 try:
-                    index = build_index(_load_corpus(selected_path))
-                    app.state.orchestrator = build_orchestrator_from_index(index)
-                    app.state.index_stats = {"chunks": len(index.chunk_texts), **index.stats()}
+                    index = build_index(load_corpus(selected_path))
+                    components = build_runtime_components(settings)
+                    app.state.orchestrator = build_orchestrator_from_index(
+                        index,
+                        vector=components.vector,
+                        bm25=components.bm25,
+                        reranker=components.reranker,
+                        llm_client=components.llm_client,
+                        generator_model=settings.llm_model,
+                    )
+                    app.state.index_stats = {
+                        "chunks": len(index.chunk_texts),
+                        **index.stats(),
+                        "wiring": components.summary(),
+                    }
                     app.state.startup_error = None
                 except Exception as exc:  # readiness exposes the safe summary
                     app.state.startup_error = str(exc)
