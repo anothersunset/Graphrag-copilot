@@ -51,7 +51,10 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["backend", "frontend", "eval", "demo_docs"]
+# Root-anchored path on purpose: the Notion sync bot owns repo-root src/,
+# its output isn't real Python (currently a bare `null`). apps/*/src and
+# packages/*/src are NOT affected — verified via a deliberate F401 probe.
+extend-exclude = ["backend", "frontend", "eval", "demo_docs", "src/notion_generated.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
