@@ -1,6 +1,6 @@
 [project]
 name = "graphrag-retrieval"
-version = "0.1.0"
+version = "0.1.1"
 description = "Four-route retrieval (vector + BM25 + KG + web) with BGE rerank for GraphRAG Copilot v3.1."
 readme = "README.md"
 requires-python = ">=3.11"
