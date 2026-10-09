@@ -22,6 +22,7 @@ from .models import (
     RelationRecord,
 )
 from .pagerank import PPRRetriever, ppr_scores
+from .persistence import load_index, save_index
 from .pipeline import Chunk, GraphRAGIndex, build_index
 from .resolution import EntityResolver, normalize_name
 
@@ -44,6 +45,8 @@ __all__ = [
     "build_index",
     "detect_communities",
     "extract_balanced_json",
+    "load_index",
     "normalize_name",
     "ppr_scores",
+    "save_index",
 ]

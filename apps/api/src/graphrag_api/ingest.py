@@ -173,6 +173,7 @@ def run_ingest(
     neo4j_auth: tuple[str, str] | None = None,
     max_tokens: int = 512,
     overlap_tokens: int = 64,
+    save_index_path: Path | None = None,
 ) -> IngestReport:
     """Run every provisioning step that has its dependencies available."""
     docs = load_corpus(corpus_path)
@@ -226,12 +227,21 @@ def run_ingest(
         export_kg_to_neo4j(index, uri=neo4j_uri, auth=neo4j_auth)
         report.neo4j_exported = True
 
+    index_path: Path | None = None
+    if save_index_path is not None:
+        from graphrag_kg import save_index as kg_save_index
+
+        index_path = Path(kg_save_index(index, save_index_path))
+        logger.info("saved index artifact to %s", index_path)
+
     manifest_path = out_dir / MANIFEST_NAME
     report.artifacts = {
         "chunks": str(chunks_path),
         "bm25": str(bm25_path),
         "manifest": str(manifest_path),
     }
+    if index_path is not None:
+        report.artifacts["index"] = str(index_path)
     manifest_path.write_text(
         json.dumps(
             {
@@ -267,6 +277,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Only write chunks.jsonl + BM25 (no embeddings).",
     )
+    parser.add_argument(
+        "--save-index",
+        type=Path,
+        default=None,
+        nargs="?",
+        const="__out_dir__",
+        help=(
+            "Persist the built KG index (LLM-grade extraction survives API "
+            "restarts). Optional path; defaults to <out-dir>/index.json. "
+            "Serve with GRAPHRAG_INDEX_PATH."
+        ),
+    )
     parser.add_argument("--neo4j-uri", default=None, help="e.g. bolt://localhost:7687")
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-password", default=None)
@@ -297,6 +319,12 @@ def main(argv: list[str] | None = None) -> int:
 
             qdrant = cast(QdrantLike, QdrantClient(url=settings.qdrant_url))
 
+    save_index_path: Path | None = None
+    if args.save_index is not None:
+        save_index_path = (
+            args.out_dir / "index.json" if str(args.save_index) == "__out_dir__" else args.save_index
+        )
+
     run_ingest(
         args.corpus,
         args.out_dir,
@@ -308,11 +336,14 @@ def main(argv: list[str] | None = None) -> int:
         else None,
         max_tokens=args.max_tokens,
         overlap_tokens=args.overlap_tokens,
+        save_index_path=save_index_path,
     )
     print(f"ingested {args.corpus} -> {args.out_dir}")
     print("serve it with:")
     print(f"  GRAPHRAG_CORPUS_PATH={args.out_dir / CHUNKS_NAME}")
     print(f"  GRAPHRAG_BM25_INDEX_PATH={args.out_dir / BM25_NAME}")
+    if save_index_path is not None:
+        print(f"  GRAPHRAG_INDEX_PATH={save_index_path}")
     return 0
 
 

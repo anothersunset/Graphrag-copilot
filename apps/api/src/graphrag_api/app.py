@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import uuid
 from collections.abc import AsyncIterator
@@ -11,19 +12,22 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from graphrag_kg import build_index
+from graphrag_kg import build_index, load_index, save_index
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from graphrag_api import __version__
+from graphrag_api._adapters import ask_payload
 from graphrag_api.assembly import build_orchestrator_from_index
 from graphrag_api.config import settings
 from graphrag_api.corpus import load_corpus
 from graphrag_api.mcp.server import mount_mcp
-from graphrag_api.run_store import RunStore
+from graphrag_api.run_store import build_run_store
 from graphrag_api.runtime import build_runtime_components
 from graphrag_api.trace.retrieval_trace import RetrievalTraceExporter
+
+logger = logging.getLogger(__name__)
 
 
 class AskRequest(BaseModel):
@@ -83,9 +87,35 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if app.state.orchestrator is None:
             selected_path = corpus_path or settings.corpus_path
-            if selected_path is not None:
+            index_artifact = settings.index_path
+            if index_artifact is not None and index_artifact.exists():
+                # Prebuilt artifact beats a corpus rebuild: it preserves
+                # LLM-grade extraction/summaries from the ingest CLI.
+                try:
+                    index = load_index(index_artifact)
+                    logger.info("loaded prebuilt index from %s", index_artifact)
+                except Exception:
+                    logger.exception(
+                        "failed to load index artifact %s; falling back to corpus build",
+                        index_artifact,
+                    )
+                    index = None
+            else:
+                index = None
+            if index is None and selected_path is not None:
                 try:
                     index = build_index(load_corpus(selected_path))
+                    if index_artifact is not None:
+                        try:
+                            save_index(index, index_artifact)
+                            logger.info("wrote index artifact to %s", index_artifact)
+                        except Exception:
+                            logger.exception("could not write index artifact; continuing")
+                except Exception as exc:  # readiness exposes the safe summary
+                    app.state.startup_error = str(exc)
+                    index = None
+            if index is not None:
+                try:
                     components = build_runtime_components(settings)
                     app.state.orchestrator = build_orchestrator_from_index(
                         index,
@@ -114,7 +144,8 @@ def create_app(
     app.state.orchestrator = orchestrator
     app.state.index_stats = None
     app.state.startup_error = None
-    app.state.run_store = RunStore(
+    app.state.run_store = build_run_store(
+        settings.run_store_url,
         capacity=settings.run_store_capacity,
         ttl_seconds=settings.run_store_ttl_seconds,
     )
@@ -134,17 +165,16 @@ def create_app(
             )
         return value
 
-    async def execute(req: AskRequest) -> AskResponse:
-        orch = current_orchestrator()
-        state = await orch.ainvoke({"question": req.query, "top_k": req.top_k})
-        cited_ids = {str(chunk_id) for chunk_id in (state.get("cited_chunk_ids") or []) if chunk_id}
+    def finalize(req: AskRequest, state: dict[str, Any]) -> AskResponse:
+        """Build the canonical response (and store it) from a final graph state."""
+        cited = {str(cid) for cid in (state.get("cited_chunk_ids") or []) if cid}
         trace = exporter.export(
             hits=state.get("hits") or [],
             fused=state.get("fused_hits") or [],
-            cited_ids=sorted(cited_ids),
+            cited_ids=sorted(cited),
             query_history=state.get("query_rewrites") or [],
         )
-        sources = _source_rows(state, cited_ids)
+        sources = _source_rows(state, cited)
         confidence = float(
             state.get("crag_score") or max((row["score"] for row in sources), default=0.0)
         )
@@ -155,7 +185,7 @@ def create_app(
             verdict=str(state.get("auditor_verdict") or "fail"),
             confidence=max(0.0, min(1.0, confidence)),
             crag_decision=str(state.get("crag_decision") or "unknown"),
-            cited_chunk_ids=sorted(cited_ids),
+            cited_chunk_ids=sorted(cited),
             sources=sources,
             retrieval_trace=trace,
             audit=[dict(item) for item in (state.get("audit") or [])],
@@ -166,6 +196,11 @@ def create_app(
         )
         app.state.run_store.put(result.run_id, result.model_dump())
         return result
+
+    async def run_ask(req: AskRequest) -> AskResponse:
+        orch = current_orchestrator()
+        state = await orch.ainvoke(ask_payload(req))
+        return finalize(req, state)
 
     @app.get("/healthz", tags=["health"])
     async def healthz() -> dict[str, Any]:
@@ -198,15 +233,49 @@ def create_app(
         if request.url.path.startswith("/api/"):
             response.headers["Deprecation"] = "true"
             response.headers["Sunset"] = "Wed, 31 Dec 2026 23:59:59 GMT"
-        return await execute(req)
+        return await run_ask(req)
 
     async def event_stream(req: AskRequest) -> AsyncIterator[str]:
+        """True SSE streaming over the graph run.
+
+        Node progress and LLM token deltas arrive as LangGraph custom
+        events (emitted via ``get_stream_writer`` inside the nodes) and
+        are forwarded verbatim; the final ``values`` snapshot is turned
+        into the canonical AskResponse for the trailing ``done`` event.
+        When nothing streamed (skeleton mode / fallback), the full answer
+        is emitted as a single token so the client contract holds.
+        """
         yield f"data: {json.dumps({'type': 'phase', 'phase': 'orchestrating'})}\n\n"
         try:
-            result = await execute(req)
-            yield f"data: {json.dumps({'type': 'answer_start'})}\n\n"
-            if result.answer:
-                yield f"data: {json.dumps({'type': 'token', 'text': result.answer})}\n\n"
+            orch = current_orchestrator()
+            if not hasattr(orch, "astream"):
+                # Orchestrator without streaming support (custom fakes,
+                # third-party wrappers): degrade to the blocking path.
+                result = await run_ask(req)
+                yield f"data: {json.dumps({'type': 'answer_start'})}\n\n"
+                if result.answer:
+                    yield f"data: {json.dumps({'type': 'token', 'text': result.answer})}\n\n"
+                yield f"data: {json.dumps({'type': 'answer_end'})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'data': result.model_dump()})}\n\n"
+                return
+            final_state: dict[str, Any] = {}
+            streamed_tokens = False
+            async for mode, chunk in orch.astream(
+                ask_payload(req), stream_mode=["custom", "values"]
+            ):
+                if mode == "custom":
+                    event = chunk if isinstance(chunk, dict) else {"type": "custom", "data": chunk}
+                    if event.get("type") == "token" and not streamed_tokens:
+                        yield f"data: {json.dumps({'type': 'answer_start'})}\n\n"
+                        streamed_tokens = True
+                    yield f"data: {json.dumps(event)}\n\n"
+                else:
+                    final_state = chunk
+            result = finalize(req, final_state)
+            if not streamed_tokens:
+                yield f"data: {json.dumps({'type': 'answer_start'})}\n\n"
+                if result.answer:
+                    yield f"data: {json.dumps({'type': 'token', 'text': result.answer})}\n\n"
             yield f"data: {json.dumps({'type': 'answer_end'})}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'data': result.model_dump()})}\n\n"
         except Exception as exc:

@@ -145,3 +145,21 @@ def test_run_ingest_without_embedder_skips_qdrant_but_writes_bm25(tmp_path):
     assert report.bm25_docs == report.chunks
     assert (out_dir / "bm25.pkl").exists()
     assert (out_dir / "chunks.jsonl").exists()
+
+
+def test_run_ingest_save_index_writes_loadable_artifact(tmp_path):
+    from graphrag_kg import load_index
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "doc1.md").write_text(CORPUS[0].content, encoding="utf-8")
+    out_dir = tmp_path / "index"
+    artifact = tmp_path / "artifacts" / "index.json"
+
+    report = run_ingest(corpus, out_dir, save_index_path=artifact)
+    assert artifact.exists()
+    assert report.artifacts["index"] == str(artifact)
+
+    restored = load_index(artifact)
+    assert restored.stats() == report.kg_stats
+    assert len(restored.chunk_texts) == report.chunks

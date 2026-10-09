@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     api_key: str | None = None
     run_store_capacity: int = 100
     run_store_ttl_seconds: int = 3600
+    # Run-store backend: unset/`memory://` (default) or `sqlite:///path`.
+    # SQLite survives restarts and is shared across uvicorn workers.
+    run_store_url: str | None = None
+    # Prebuilt index artifact (from the ingest CLI's --save-index). When it
+    # exists the API boots from it directly — LLM-grade extraction and
+    # community summaries survive restarts instead of degrading to the
+    # co-occurrence rebuild. When missing but corpus_path is set, the API
+    # builds offline and writes the artifact back (write-through).
+    index_path: Path | None = None
 
     # -- optional runtime wiring (all default off -> offline demo mode) ----
     # OpenAI-compatible LLM (DeepSeek / Zhipu / vLLM ...). All three must be
