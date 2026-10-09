@@ -45,6 +45,49 @@ def _is_refusal(answer: str) -> bool:
     return any(m in answer for m in refusal_markers)
 
 
+def _generate_answer(llm: Any, model: str, user_prompt: str, timeout_s: float) -> str:
+    """Call the LLM, streaming tokens when both sides support it.
+
+    Token deltas are pushed through LangGraph's stream writer so
+    ``astream(..., stream_mode="custom")`` subscribers (the SSE endpoint)
+    receive true incremental output. Outside a streaming context the
+    writer is a no-op and this behaves like a plain blocking call.
+    """
+    stream_fn = getattr(llm, "complete_stream", None)
+    if stream_fn is None:
+        result = llm.complete(model=model, system=SYSTEM_PROMPT, user=user_prompt,
+                              timeout_s=timeout_s)
+        if isinstance(result, str):
+            return result
+        return str(getattr(result, "answer", result))  # Instructor-style output
+
+    try:
+        from langgraph.config import get_stream_writer
+
+        writer = get_stream_writer()
+    except ImportError:  # pragma: no cover - langgraph always present here
+        writer = None
+    writer = writer if writer is not None else (lambda _event: None)
+
+    parts: list[str] = []
+    started = False
+    try:
+        for delta in stream_fn(model=model, system=SYSTEM_PROMPT, user=user_prompt,
+                               timeout_s=timeout_s):
+            if not delta:
+                continue
+            if not started:
+                writer({"type": "answer_start"})
+                started = True
+            parts.append(delta)
+            writer({"type": "token", "text": delta})
+    except Exception:
+        logger.exception("generator: streaming LLM call failed")
+        if not parts:
+            return REFUSAL_ANSWER
+    return "".join(parts)
+
+
 def generator_node(state: GraphState, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
     llm = cfg.get("llm_client")
@@ -78,21 +121,7 @@ def generator_node(state: GraphState, config: dict[str, Any] | None = None) -> d
             f"{question!r} would be synthesized here."
         )
     else:
-        try:
-            result = llm.complete(
-                model=model,
-                system=SYSTEM_PROMPT,
-                user=user_prompt,
-                timeout_s=timeout_s,
-            )
-            if isinstance(result, str):
-                answer = result
-            else:
-                # Instructor structured output — expect .answer field
-                answer = getattr(result, "answer", str(result))
-        except Exception:
-            logger.exception("generator: LLM call failed")
-            answer = REFUSAL_ANSWER
+        answer = _generate_answer(llm, model, user_prompt, timeout_s)
 
     # ── 后验检查：短答案无引用时强制拒答，长答案仅警告 ──
     if not _is_refusal(answer) and not _has_citations(answer):

@@ -101,3 +101,40 @@ def test_network_failure_wrapped():
 
     with pytest.raises(RuntimeError, match="LLM request failed"):
         _client(handler).complete(model="", system="s", user="u")
+
+
+def _sse(lines: list[str]) -> httpx.Response:
+    body = "".join(line + "\n\n" for line in lines)
+    return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+
+def test_complete_stream_yields_content_deltas():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _sse([
+            'data: {"choices":[{"delta":{"role":"assistant"}}]}',
+            'data: {"choices":[{"delta":{"content":"Neo4j "}}]}',
+            'data: {"choices":[{"delta":{"content":"使用 Cypher"}}]}',
+            "data: [DONE]",
+        ])
+
+    deltas = list(_client(handler).complete_stream(model="", system="s", user="u"))
+    assert deltas == ["Neo4j ", "使用 Cypher"]
+
+
+def test_complete_stream_request_asks_for_streaming():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content)
+        return _sse(["data: [DONE]"])
+
+    list(_client(handler).complete_stream(model="", system="s", user="u"))
+    assert seen["payload"]["stream"] is True
+
+
+def test_complete_stream_http_error_raises():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="server exploded")
+
+    with pytest.raises(RuntimeError, match="500"):
+        list(_client(handler).complete_stream(model="", system="s", user="u"))

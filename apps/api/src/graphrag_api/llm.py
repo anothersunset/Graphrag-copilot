@@ -8,7 +8,9 @@ nodes already offload blocking calls via ``asyncio.to_thread``.
 
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -52,6 +54,21 @@ class OpenAICompatLLMClient:
             return self._base_url
         return f"{self._base_url}/chat/completions"
 
+    def _request_payload(
+        self, *, model: str, system: str, user: str, stream: bool
+    ) -> dict[str, Any]:
+        use_model = model or self._model
+        payload: dict[str, Any] = {
+            "model": use_model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        }
+        if stream:
+            payload["stream"] = True
+        return payload
+
     def complete(
         self,
         *,
@@ -61,17 +78,10 @@ class OpenAICompatLLMClient:
         response_schema: type | None = None,
         timeout_s: float = 30.0,
     ) -> Any:
-        use_model = model or self._model
-        user_content = user
-        if response_schema is not None:
-            user_content = f"{user}{_JSON_INSTRUCTION}"
-        payload = {
-            "model": use_model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_content},
-            ],
-        }
+        user_content = f"{user}{_JSON_INSTRUCTION}" if response_schema is not None else user
+        payload = self._request_payload(
+            model=model, system=system, user=user_content, stream=False
+        )
         headers = {"Authorization": f"Bearer {self._api_key}"}
         timeout = httpx.Timeout(timeout_s or self._default_timeout_s)
         try:
@@ -99,3 +109,44 @@ class OpenAICompatLLMClient:
             # as {"raw_response": ...}, the planner's established contract.
             return extract_json_object(content)
         return content
+
+    def complete_stream(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        timeout_s: float = 60.0,
+    ) -> Iterator[str]:
+        """Yield answer deltas over the OpenAI streaming protocol.
+
+        Emits ``data: {"choices":[{"delta":{"content": ...}}]}`` chunks up
+        to the ``data: [DONE]`` sentinel — the wire format every
+        OpenAI-compatible endpoint (DeepSeek / Zhipu / vLLM) speaks.
+        """
+        payload = self._request_payload(model=model, system=system, user=user, stream=True)
+        headers = {"Authorization": f"Bearer {self._api_key}"}
+        timeout = httpx.Timeout(timeout_s or self._default_timeout_s)
+        with self._client.stream(
+            "POST", self._endpoint(), json=payload, headers=headers, timeout=timeout
+        ) as response:
+            if response.status_code != 200:
+                detail = response.read().decode("utf-8", errors="replace")[:200]
+                raise RuntimeError(
+                    f"LLM endpoint returned {response.status_code}: {detail}"
+                )
+            for line in response.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[len("data:") :].strip()
+                if data == "[DONE]":
+                    break
+                if not data:
+                    continue
+                try:
+                    chunk = json.loads(data)
+                    delta = chunk["choices"][0]["delta"].get("content")
+                except (KeyError, IndexError, TypeError, ValueError):
+                    continue  # role/finish chunks carry no content
+                if delta:
+                    yield delta
