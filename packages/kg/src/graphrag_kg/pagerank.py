@@ -98,7 +98,13 @@ def ppr_scores(
 
 
 class PPRRetriever:
-    """HippoRAG-style chunk retriever backed by Personalized PageRank."""
+    """HippoRAG-style chunk retriever backed by Personalized PageRank.
+
+    Hit scores are calibrated to [0, 1] relative to the top candidate
+    (``normalize=True``, the default) so the KG route participates in
+    CRAG routing on the same scale as cross-encoder scores; set
+    ``normalize=False`` to get raw PPR masses (e.g. for benchmarks).
+    """
 
     name = "kg"
 
@@ -112,6 +118,7 @@ class PPRRetriever:
         top_nodes: int = 20,
         include_paths: bool = True,
         max_depth: int = 2,
+        normalize: bool = True,
     ) -> None:
         self.index = index
         self._chunk_lookup = chunk_lookup
@@ -120,6 +127,7 @@ class PPRRetriever:
         self.top_nodes = top_nodes
         self.include_paths = include_paths
         self.max_depth = max_depth
+        self.normalize = normalize
 
     def _seeds(self, query: str) -> list[str]:
         terms = self.ner.extract(query) if self.ner is not None else _default_query_terms(query)
@@ -144,8 +152,27 @@ class PPRRetriever:
                 chunk_scores[cid] = chunk_scores.get(cid, 0.0) + score
                 chunk_nodes.setdefault(cid, []).append(node)
 
+        # PPR mass is a probability distribution whose absolute scale
+        # shrinks with graph size and seed count (~1e-3 on realistic
+        # graphs) — it is meaningless against CRAG's absolute thresholds
+        # (use >= 0.5, coverage floor 0.3), which routed every KG-only
+        # query to fallback (devlog-2026-07-08 §4). Calibrate to the
+        # retrieved candidates: divide by the top score so hits land in
+        # [0, 1] with ranking preserved. CRAG's spread damping still
+        # penalizes flat, non-discriminative evidence sets.
+        if self.normalize and chunk_scores:
+            peak = max(chunk_scores.values())
+            if peak > 0.0:
+                chunk_scores = {cid: s / peak for cid, s in chunk_scores.items()}
+
         hits: list[dict[str, Any]] = []
-        for cid, score in sorted(chunk_scores.items(), key=lambda kv: -kv[1])[:top_k]:
+        # Zero-mass chunks (entities the query never reaches) are not
+        # evidence — dropping them keeps CRAG's coverage honest.
+        ranked_chunks = sorted(
+            ((cid, s) for cid, s in chunk_scores.items() if s > 0.0),
+            key=lambda kv: -kv[1],
+        )
+        for cid, score in ranked_chunks[:top_k]:
             content = self._chunk_lookup(cid) if self._chunk_lookup else ""
             if not content:
                 # No chunk text available — render the grounding entities so
