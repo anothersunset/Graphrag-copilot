@@ -86,9 +86,7 @@ extraPaths = [
   "packages/kg/src",
   "packages/observability/src",
   "packages/parsers/src",
-  "packages/reranker/src",
   "packages/retrieval/src",
-  "packages/retriever/src",
   "packages/schemas/src",
 ]
 pythonVersion = "3.12"
@@ -115,4 +113,4 @@ omit = ["*/tests/*", "*/__main__.py"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 0  # W5 raises to 70 after baseline
+fail_under = 70  # spec floor; actual coverage is ~83% (W8 fulfilled)
