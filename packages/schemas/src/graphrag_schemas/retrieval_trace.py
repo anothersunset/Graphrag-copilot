@@ -1,4 +1,8 @@
-"""Retrieval trace and CRAG decision schemas."""
+"""Retrieval trace and CRAG decision schemas.
+
+``CRAGBranch``/``CRAGDecision`` are defined once in ``graphrag_schemas.crag``
+and re-exported here for import compatibility.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +13,18 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+
+from .crag import CRAGBranch, CRAGDecision
+
+__all__ = [
+    "CRAGBranch",
+    "CRAGDecision",
+    "RetrievalStep",
+    "RetrievalTrace",
+    "RetrieverKind",
+    "ToolKind",
+    "ToolSpec",
+]
 
 
 class RetrieverKind(StrEnum):
@@ -64,54 +80,6 @@ class RetrievalTrace(BaseModel):
     def by_retriever(self, kind: RetrieverKind) -> list[RetrievalStep]:
         """Return steps filtered by retriever kind."""
         return [s for s in self.steps if s.retriever is kind]
-
-
-class CRAGBranch(StrEnum):
-    """CRAG routing branches."""
-
-    USE = "use"
-    REWRITE = "rewrite"
-    FALLBACK = "fallback"
-
-
-class CRAGDecision(BaseModel):
-    """A CRAG routing decision with provenance."""
-
-    model_config = {"frozen": True}
-
-    parent_trace_id: UUID
-    branch: CRAGBranch
-    confidence_score: float
-    reasoning: str
-    rewrite_count: int = 0
-
-    @classmethod
-    def from_score(
-        cls,
-        parent_trace_id: UUID,
-        confidence_score: float,
-        reasoning: str,
-        rewrite_count: int = 0,
-        use_threshold: float = 0.7,
-        rewrite_threshold: float = 0.3,
-        max_rewrites: int = 2,
-    ) -> CRAGDecision:
-        """Derive branch from score and rewrite count."""
-        if rewrite_count >= max_rewrites:
-            branch = CRAGBranch.FALLBACK
-        elif confidence_score >= use_threshold:
-            branch = CRAGBranch.USE
-        elif confidence_score >= rewrite_threshold:
-            branch = CRAGBranch.REWRITE
-        else:
-            branch = CRAGBranch.FALLBACK
-        return cls(
-            parent_trace_id=parent_trace_id,
-            branch=branch,
-            confidence_score=confidence_score,
-            reasoning=reasoning,
-            rewrite_count=rewrite_count,
-        )
 
 
 _SNAKE_CASE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
