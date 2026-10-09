@@ -63,6 +63,9 @@ services:
     environment:
       DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD:-langfuse-dev}@langfuse-db:5432/langfuse
       NEXTAUTH_URL: http://localhost:3010
+      # Dev-only defaults — copy infra/docker/.env.example to .env and
+      # generate real values (openssl rand -base64 32) before any shared
+      # or hosted deployment.
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-please-change-me-32chars-xxxxxxxxxx}
       SALT: ${LANGFUSE_SALT:-please-change-me-32chars-xxxxxxxxxx}
       TELEMETRY_ENABLED: "false"

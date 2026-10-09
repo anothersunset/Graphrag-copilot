@@ -27,15 +27,12 @@
 
 ## P1 — 影响核心质量
 
-### 3. PPR 分数归一化或接 BGE reranker，让 KG 路真正参与 CRAG 路由
-- **问题**：PPR 原始分 ~1e-3，低于 CRAG 阈值（use=0.5），
-  KG-only local 查询会误走 fallback。
-- **证据**：`docs/devlog-2026-07-08-graphrag-index-layer.md` §4。
-- **起点文件**：`packages/kg/src/graphrag_kg/pagerank.py`、
-  `packages/graph/src/graphrag_graph/crag.py`、
-  `packages/graph/src/graphrag_graph/nodes/evaluator.py`。
-- **验收**：构造 KG-only 命中的用例，CRAG 决策为 `use` 而非 `fallback`；
-  对应单测入 `packages/graph/tests/`。
+### 3. ~~PPR 分数归一化或接 BGE reranker，让 KG 路真正参与 CRAG 路由~~ ✅ 已完成（2026-09-24）
+- **修复**：`PPRRetriever` 命中分按 top 候选校准到 [0,1]（`normalize=True`
+  默认开，`normalize=False` 保留原始概率质量），零质量 chunk 不再进入
+  hits；KG-only 证据现在能通过 CRAG use 门。
+- **验收**：`packages/kg/tests/test_pagerank.py` 新增 3 个回归测试，
+  含「归一化 PPR hits → CragScorer 判 use」端到端用例。
 
 ### 4. 检索栈真实化第二阶段
 - **内容**（第一阶段遗留，见 `apps/api/src/graphrag_api/ingest.py` 模块注释）：
@@ -68,8 +65,7 @@
 ### 7. 兑现 W5 / W8 收尾项
 - Langfuse trace 下钻接通：`packages/observability`（`langfuse_tracer.py`
   当前 40% 覆盖）与 dev compose 里的 Langfuse 服务实际未串进主链路验证。
-- 覆盖率门槛：`pyproject.toml` 中 `fail_under = 0`，实测已 83%，
-  应提到 70 兑现 spec 承诺（防止回退）。
+- ~~覆盖率门槛~~ ✅ 已完成（2026-09-24）：`fail_under = 70`（实测 ~83%）。
 - 打 v3 正式 release（CHANGELOG + tag；`release-please` 配置已就绪）。
 
 ### 8. SSE 真流式
@@ -84,12 +80,12 @@
 | 项 | 说明 | 位置 |
 |---|---|---|
 | RunStore 单进程内存 | 多 worker 下 `GET /v1/runs/{id}` 必 404；方向：Redis/SQLite 后端 + `run_store` 接口化 | `apps/api/src/graphrag_api/run_store.py` |
-| schemas 重复定义 | `CRAGBranch`/`CRAGDecision` 双份；API 层 `RetrievalTraceExporter` 手拼 dict 未消费 `schemas.RetrievalTrace` | `packages/schemas/src/graphrag_schemas/{crag,retrieval_trace}.py` |
-| 文档漂移 | `PROJECT_STRUCTURE.md` 描述的 routes/ 目录、7 包数量与实际不符 | 根目录 |
-| 空壳包 | `packages/reranker`、`packages/retriever` 只有 `__init__.py`，易误导 | 对应目录 |
+| ~~schemas 重复定义~~ ✅ 2026-09-24 | `CRAGBranch`/`CRAGDecision` 收敛为 `crag.py` 唯一定义，`retrieval_trace.py` re-export；`RetrievalTraceExporter` 消费 schemas 类型仍未做 | `packages/schemas/src/graphrag_schemas/crag.py` |
+| ~~文档漂移~~ ✅ 2026-09-24 | `PROJECT_STRUCTURE.md` 已按真实文件布局重写 | 根目录 |
+| ~~空壳包~~ ✅ 2026-09-24 | `packages/reranker`、`packages/retriever` 已删除（uv.lock 已同步） | — |
 | dependabot 分支堆 | 远端 14 个分支待处置（合并或关闭） | origin |
 | v1 legacy 归档 | ADR-0001 约定的时间表未执行；注意 `backend/app/agents/orchestrator.py` 已反向依赖 v3 `packages/graph`，归档时需解耦 | `backend/`、`frontend/` |
-| 敏感默认值 | v1 compose 硬编码 `neo4j/graphrag123`；langfuse NextAuth secret 默认值 | `docker-compose.yml`、`infra/docker/` |
+| ~~敏感默认值~~ ✅ 2026-09-24 | v1 compose 的 `NEO4J_PASSWORD` 已参数化（默认值标注为公开样例）；langfuse dev secret 加覆盖指引 | `docker-compose.yml`、`infra/docker/` |
 | planner 启发式泛化 | 中文关键词表硬编码，跨语言/领域弱；可评估用已接线的 LLM 兜底路径替代 | `packages/graph/src/graphrag_graph/nodes/planner.py` |
 
 ---

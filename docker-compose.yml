@@ -6,7 +6,9 @@ services:
       - "7474:7474"
       - "7687:7687"
     environment:
-      - NEO4J_AUTH=neo4j/graphrag123
+      # Legacy v1 demo stack. Override NEO4J_PASSWORD via env or .env —
+      # the default is a public sample credential, not a secret.
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-graphrag123}
       - NEO4J_PLUGINS=["apoc"]
     volumes:
       - neo4j_data:/data
@@ -22,7 +24,7 @@ services:
     environment:
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=graphrag123
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-graphrag123}
     volumes:
       - ./backend/data:/app/data
       - ./backend/.env:/app/.env
