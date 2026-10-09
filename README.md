@@ -47,16 +47,19 @@ GRAPHRAG_CORPUS_PATH=/path/to/corpus make api
 
 | 组件 | 环境变量 | 说明 |
 |---|---|---|
-| LLM 生成 | `GRAPHRAG_LLM_BASE_URL` / `GRAPHRAG_LLM_API_KEY` / `GRAPHRAG_LLM_MODEL` | 三者齐备才启用（DeepSeek/智谱/vLLM 等 OpenAI 兼容端点） |
+| LLM 生成 | `GRAPHRAG_LLM_BASE_URL` / `GRAPHRAG_LLM_API_KEY` / `GRAPHRAG_LLM_MODEL` | 三者齐备才启用（DeepSeek/智谱/vLLM 等 OpenAI 兼容端点）；启用后 `/v1/ask/stream` 为逐 token 真流式 |
 | 向量检索 | `GRAPHRAG_QDRANT_URL` + `GRAPHRAG_EMBEDDING_MODEL` | 需先灌库；`GRAPHRAG_EMBEDDING_DIM` 默认 1024 |
 | BM25 检索 | `GRAPHRAG_BM25_INDEX_PATH` | 指向 ingest 产出的 `bm25.pkl` |
 | Rerank | `GRAPHRAG_RERANKER_MODEL` | 需安装 `graphrag-retrieval[rerank]`（FlagEmbedding） |
+| KG 索引持久化 | `GRAPHRAG_INDEX_PATH` | 指向 ingest `--save-index` 产出的 `index.json`；存在则直接加载（LLM 级抽取重启不丢），不存在则从语料构建并回写 |
+| Run 存储 | `GRAPHRAG_RUN_STORE_URL` | 默认 `memory://`；`sqlite:///data/runs.db` 跨进程/重启可查 `/v1/runs/{id}` |
 
-灌库 CLI（细粒度分块 → KG → Qdrant 上插 → BM25 持久化，可选 `--neo4j-uri` 导出图谱）：
+灌库 CLI（细粒度分块 → KG → Qdrant 上插 → BM25 持久化，`--save-index` 持久化 KG 索引，可选 `--neo4j-uri` 导出图谱）：
 
 ```bash
-make ingest ARGS="--corpus /path/to/corpus --out-dir data/index"
+make ingest ARGS="--corpus /path/to/corpus --out-dir data/index --save-index"
 # 按产物启动，保证 KG/向量/BM25 服务同一份分块：
+GRAPHRAG_INDEX_PATH=data/index/index.json \
 GRAPHRAG_CORPUS_PATH=data/index/chunks.jsonl \
 GRAPHRAG_BM25_INDEX_PATH=data/index/bm25.pkl \
 GRAPHRAG_QDRANT_URL=http://localhost:6333 \

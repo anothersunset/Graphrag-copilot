@@ -35,17 +35,16 @@
   含「归一化 PPR hits → CragScorer 判 use」端到端用例。
 
 ### 4. 检索栈真实化第二阶段
-- **内容**（第一阶段遗留，见 `apps/api/src/graphrag_api/ingest.py` 模块注释）：
-  - KG 索引持久化：目前 API 启动时用 `load_corpus` 原地重建（离线质量），
-    ingest 时的 LLM 级抽取/社区摘要不能在重启后存活。
-    方向：`GraphRAGIndex` 序列化（networkx graph + communities + chunk_texts），
-    API 启动时优先加载已持久化索引。
-  - 真实环境端到端验证：Qdrant 容器（`infra/docker/docker-compose.dev.yml`）
-    + 真实 embedding 模型跑一次 `make ingest` + `make api` + smoke，
-    确认 `/readyz` wiring 上报 `VectorRetriever`、答案引用来自 vector 路。
-  - LLM 抽取/摘要质量评测：`build_index(llm=...)` 打开 gleaning 抽取后，
-    在真实语料上对比 co-occurrence 基线（devlog-07-08 明确提出未验证）。
-- **验收**：重启后 KG 不退化；端到端 smoke 日志可见四路融合。
+- ~~KG 索引持久化~~ ✅ 已完成（2026-09-24）：`graphrag_kg.persistence`
+  （save_index/load_index，networkx node-link JSON v1 格式，别名表加载时重建）；
+  API 侧 `GRAPHRAG_INDEX_PATH` 存在即加载、缺失则构建并回写（write-through）；
+  ingest CLI `--save-index`。回归：PPR/别名/社区检索 roundtrip 一致（6 测试）。
+- 真实环境端到端验证：Qdrant 容器（`infra/docker/docker-compose.dev.yml`）
+  + 真实 embedding 模型跑一次 `make ingest` + `make api` + smoke，
+  确认 `/readyz` wiring 上报 `VectorRetriever`、答案引用来自 vector 路。
+- LLM 抽取/摘要质量评测：`build_index(llm=...)` 打开 gleaning 抽取后，
+  在真实语料上对比 co-occurrence 基线（devlog-07-08 明确提出未验证）。
+- **验收**：重启后 KG 不退化（已达成）；端到端 smoke 日志可见四路融合（待真实环境）。
 
 ### 5. 复核 boundary refusal 指标口径
 - **问题**：Boundary Refusal Rate 从早期口径 0.8333 掉到最终评测 0.08，
@@ -68,10 +67,12 @@
 - ~~覆盖率门槛~~ ✅ 已完成（2026-09-24）：`fail_under = 70`（实测 ~83%）。
 - 打 v3 正式 release（CHANGELOG + tag；`release-please` 配置已就绪）。
 
-### 8. SSE 真流式
-- `apps/api/src/graphrag_api/app.py` 的 `event_stream` 是伪流式：
-  `execute()` 完整返回后才发 token。与前端 `askStream()` 的叙事不匹配。
-- 方向：generator 节点透传 LLM token 流（LangGraph `astream_events`）。
+### 8. ~~SSE 真流式~~ ✅ 已完成（2026-09-24）
+- `OpenAICompatLLMClient.complete_stream`（OpenAI 流式协议 SSE 解析）→
+  generator 节点经 LangGraph `get_stream_writer` 逐 token 发出自定义事件 →
+  `event_stream` 用 `astream(stream_mode=["custom","values"])` 转发，
+  final state 构建 `done` 事件；骨架/fallback/无 astream 编排器均降级为
+  单 token（前端协议不变）。测试：token 增量、协议顺序、降级路径 3 项。
 
 ---
 
@@ -79,7 +80,7 @@
 
 | 项 | 说明 | 位置 |
 |---|---|---|
-| RunStore 单进程内存 | 多 worker 下 `GET /v1/runs/{id}` 必 404；方向：Redis/SQLite 后端 + `run_store` 接口化 | `apps/api/src/graphrag_api/run_store.py` |
+| ~~RunStore 单进程内存~~ ✅ 2026-09-24 | 新增 `SqliteRunStore`（WAL、LRU+TTL 同语义、跨进程可见），`GRAPHRAG_RUN_STORE_URL=sqlite:///...` 启用；默认仍为内存 | `apps/api/src/graphrag_api/run_store.py` |
 | ~~schemas 重复定义~~ ✅ 2026-09-24 | `CRAGBranch`/`CRAGDecision` 收敛为 `crag.py` 唯一定义，`retrieval_trace.py` re-export；`RetrievalTraceExporter` 消费 schemas 类型仍未做 | `packages/schemas/src/graphrag_schemas/crag.py` |
 | ~~文档漂移~~ ✅ 2026-09-24 | `PROJECT_STRUCTURE.md` 已按真实文件布局重写 | 根目录 |
 | ~~空壳包~~ ✅ 2026-09-24 | `packages/reranker`、`packages/retriever` 已删除（uv.lock 已同步） | — |
