@@ -265,8 +265,7 @@ def create_app(
             ):
                 if mode == "custom":
                     event = chunk if isinstance(chunk, dict) else {"type": "custom", "data": chunk}
-                    if event.get("type") == "token" and not streamed_tokens:
-                        yield f"data: {json.dumps({'type': 'answer_start'})}\n\n"
+                    if event.get("type") == "token":
                         streamed_tokens = True
                     yield f"data: {json.dumps(event)}\n\n"
                 else:

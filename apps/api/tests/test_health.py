@@ -5,7 +5,12 @@ from graphrag_api.app import create_app
 from starlette.testclient import TestClient
 
 
-def test_healthz_is_public_and_ready_fails_closed_without_index() -> None:
+def test_healthz_is_public_and_ready_fails_closed_without_index(monkeypatch) -> None:
+    # isolate from a developer's local .env (GRAPHRAG_CORPUS_PATH would boot an index)
+    from graphrag_api import app as app_module
+
+    monkeypatch.setattr(app_module.settings, "corpus_path", None)
+    monkeypatch.setattr(app_module.settings, "index_path", None)
     with TestClient(create_app()) as client:
         health = client.get("/healthz")
         assert health.status_code == 200

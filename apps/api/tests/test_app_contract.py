@@ -63,7 +63,13 @@ def test_api_key_and_legacy_deprecation_headers() -> None:
     assert "Sunset" in response.headers
 
 
-def test_ask_fails_closed_without_index() -> None:
+def test_ask_fails_closed_without_index(monkeypatch) -> None:
+    # a developer's local .env (e.g. GRAPHRAG_CORPUS_PATH=demo_docs) must
+    # not silently boot an index inside this "no index configured" test
+    from graphrag_api import app as app_module
+
+    monkeypatch.setattr(app_module.settings, "corpus_path", None)
+    monkeypatch.setattr(app_module.settings, "index_path", None)
     with TestClient(create_app()) as client:
         response = client.post("/v1/ask", json={"query": "q"})
     assert response.status_code == 503

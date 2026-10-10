@@ -243,6 +243,18 @@ def planner_node(state: GraphState, config: dict[str, Any] | None = None) -> dic
     if cfg.get("enable_web_search", False):
         tools.append("retrieve_web")
 
+    # Capability-aware pruning: never plan a route whose retriever isn't
+    # registered (the offline demo wires only kg + kg_global), and never
+    # plan an empty fan-out — a chunk route going missing promotes the
+    # KG route so factual questions still retrieve instead of falling
+    # straight through to CRAG fallback with zero evidence.
+    available = set(cfg.get("retrievers", {})) or {"vector", "bm25", "kg", "kg_global"}
+    pruned = [t for t in tools if t.removeprefix("retrieve_") in available]
+    if not pruned:
+        fallback_routes = [r for r in ("kg", "kg_global", "vector", "bm25") if r in available]
+        pruned = [f"retrieve_{r}" for r in fallback_routes[:1]]
+    tools = pruned
+
     if (intent == "multihop" and difficulty == "hard") or intent == "crossdoc":
         plan["extra_retrieval"] = True
 

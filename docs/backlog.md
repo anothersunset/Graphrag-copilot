@@ -42,9 +42,14 @@
 - 真实环境端到端验证：Qdrant 容器（`infra/docker/docker-compose.dev.yml`）
   + 真实 embedding 模型跑一次 `make ingest` + `make api` + smoke，
   确认 `/readyz` wiring 上报 `VectorRetriever`、答案引用来自 vector 路。
-- LLM 抽取/摘要质量评测：`build_index(llm=...)` 打开 gleaning 抽取后，
-  在真实语料上对比 co-occurrence 基线（devlog-07-08 明确提出未验证）。
-- **验收**：重启后 KG 不退化（已达成）；端到端 smoke 日志可见四路融合（待真实环境）。
+- ~~LLM 抽取/摘要质量评测~~ ✅ 已完成（2026-10-10，glm-4-flash，demo_docs）：
+  实体 30→76、边 60→73（含 PART_OF/USES/WORKS_FOR 语义类型）、
+  社区 4→11；PPR top-2 检索与小语料基线等价，但图谱语义丰富度显著更高
+  （概念级实体如「知识分级与权限隔离」「跨文档多跳推理」）；
+  成本 1s→366s——正是索引持久化的价值所在。
+  附带修复：planner 现在按已注册检索器裁剪计划（能力感知），
+  离线模式下 factual/local 问题不再零检索直落 fallback。
+- **验收**：重启后 KG 不退化（已达成）；端到端 smoke 日志可见四路融合（待 Qdrant 环境）。
 
 ### 5. 复核 boundary refusal 指标口径
 - **问题**：Boundary Refusal Rate 从早期口径 0.8333 掉到最终评测 0.08，
