@@ -15,7 +15,8 @@
     "@xyflow/react": "^12.10.2",
     "next": "15.5.20",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "react-force-graph-2d": "^1.29.1"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

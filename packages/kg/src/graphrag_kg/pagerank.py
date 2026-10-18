@@ -30,7 +30,11 @@ logger = logging.getLogger(__name__)
 
 ChunkLookup = Callable[[str], str]
 
-_LATIN_TERM = re.compile(r"\b[A-Za-z][A-Za-z0-9_\-]{1,}\b")
+# NOTE: no \b anchors — in "什么是rag" there is no word boundary between
+# the CJK char and "rag" (both are \w), so \b silently dropped the term
+# and the PPR walk started from zero seeds. The lookbehind only rejects
+# terms glued to other ASCII word characters (e.g. "xGraphRAG").
+_LATIN_TERM = re.compile(r"(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]+")
 
 
 def _default_query_terms(query: str) -> list[str]:

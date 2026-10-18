@@ -24,6 +24,27 @@
       }
     }
   },
+  "overrides": [
+    {
+        "include": ["src/app/graph/**"],
+        "linter": {
+          "rules": {
+            "suspicious": {
+              "noExplicitAny": "off"
+            },
+            "complexity": {
+              "noForEach": "off"
+            },
+            "a11y": {
+              "useKeyWithClickEvents": "off"
+            },
+            "correctness": {
+              "useExhaustiveDependencies": "off"
+            }
+          }
+        }
+    }
+  ],
   "javascript": {
     "formatter": {
       "quoteStyle": "double",

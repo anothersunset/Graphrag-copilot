@@ -85,6 +85,18 @@ async def test_ppr_retriever_no_entity_match_returns_empty():
     assert await retriever.aretrieve("完全无关的问题", top_k=3) == []
 
 
+async def test_cjk_adjacent_latin_term_seeds_the_walk():
+    """“什么是rag” must seed PPR via "rag": CJK chars are \w, so a \b
+    anchor silently dropped the term and the query fell to fallback with
+    zero evidence (user-visible regression on the deployed UI)."""
+    idx = _chain_index()
+    chunk_texts = {"c1": "AlphaSys connects through Bridge.", "c2": "CoreDB stores data."}
+    retriever = PPRRetriever(idx, chunk_lookup=lambda chunk_id: chunk_texts.get(chunk_id, ""))
+    hits = await retriever.aretrieve("什么是alphasys", top_k=3)
+    assert hits, "CJK-adjacent latin term must still seed the graph walk"
+    assert hits[0]["chunk_id"] == "c1"
+
+
 async def test_ppr_retriever_normalizes_scores_to_unit_scale():
     """Backlog P1-3: raw PPR masses (~1e-3) sit below CRAG's absolute
     thresholds and routed every KG-only query to fallback. Default hits

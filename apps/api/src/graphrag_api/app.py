@@ -22,6 +22,7 @@ from graphrag_api._adapters import ask_payload
 from graphrag_api.assembly import build_orchestrator_from_index
 from graphrag_api.config import settings
 from graphrag_api.corpus import load_corpus
+from graphrag_api.graph_routes import router as graph_router
 from graphrag_api.mcp.server import mount_mcp
 from graphrag_api.run_store import build_run_store
 from graphrag_api.runtime import build_runtime_components
@@ -130,6 +131,7 @@ def create_app(
                         **index.stats(),
                         "wiring": components.summary(),
                     }
+                    app.state.index = index
                     app.state.startup_error = None
                 except Exception as exc:  # readiness exposes the safe summary
                     app.state.startup_error = str(exc)
@@ -142,6 +144,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.orchestrator = orchestrator
+    app.state.index = None
     app.state.index_stats = None
     app.state.startup_error = None
     app.state.run_store = build_run_store(
@@ -150,6 +153,7 @@ def create_app(
         ttl_seconds=settings.run_store_ttl_seconds,
     )
     exporter = RetrievalTraceExporter()
+    app.include_router(graph_router)
 
     def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
         if effective_key is None:
