@@ -1,6 +1,7 @@
 """GraphRAG Copilot - FAISS 向量存储 + Embedding"""
 from typing import List, Dict, Any
 import json
+import os
 import threading
 import numpy as np
 from config.settings import settings
@@ -95,9 +96,15 @@ class VectorStore:
         docs_path = settings.VECTOR_DB_DIR / "documents.json"
 
         try:
-            faiss.write_index(self.index, str(index_path))
-            with open(docs_path, "w", encoding="utf-8") as f:
+            # 原子写入：先写临时文件再 rename，避免崩溃致索引与文档不一致
+            index_tmp = str(index_path) + ".tmp"
+            faiss.write_index(self.index, index_tmp)
+            os.replace(index_tmp, str(index_path))
+
+            docs_tmp = str(docs_path) + ".tmp"
+            with open(docs_tmp, "w", encoding="utf-8") as f:
                 json.dump(self.documents, f, ensure_ascii=False, indent=2)
+            os.replace(docs_tmp, str(docs_path))
         except Exception:
             logger.exception("FAISS 索引落盘失败")
 
