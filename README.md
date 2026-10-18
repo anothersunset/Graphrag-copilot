@@ -5,7 +5,9 @@
 - API：`apps/api`（FastAPI + MCP）
 - Web：`apps/web`（Next.js 15 + React 19）
 - 核心包：`packages/*`
-- 兼容代码：`backend` 与 `frontend`（legacy v1，不是默认入口）
+- 兼容代码：`legacy/backend` 与 `legacy/frontend`（legacy v1，不是默认入口）
+
+目录总览与文件归类约定见 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)，文档导航见 [docs/README.md](docs/README.md)。
 
 ## 环境要求
 
@@ -35,11 +37,24 @@ make web  # http://127.0.0.1:3000
 make dev
 ```
 
-`make api` 默认使用 `demo_docs` 构建可查询的本地索引，因此启动后 readiness 与问答入口可直接验收。生产或自定义语料请覆盖：
+`make api` 默认使用 `examples/demo_docs` 构建可查询的本地索引，因此启动后 readiness 与问答入口可直接验收。生产或自定义语料请覆盖：
 
 ```bash
 GRAPHRAG_CORPUS_PATH=/path/to/corpus make api
 ```
+
+## Docker 部署（v3 栈）
+
+```bash
+make docker-up     # 构建并启动 api(:8000) + web(:3000)，LLM 密钥从根 .env 读取
+make docker-logs   # 跟踪日志
+make docker-down   # 停止（保留数据卷）
+```
+
+- **API 容器**（`apps/api/Dockerfile`）：uv 多阶段构建、非 root 运行、自带 demo 语料，开箱即可问答；索引工件（`/data/index.json`）与运行历史（SQLite `/data/runs.db`）落在 `graphrag-v3_api-data` 卷上，**重启不重建索引、runs 可回查**。
+- **Web 容器**（`apps/web/Dockerfile`）：pnpm 构建 + Next.js standalone 输出，经同源 `/api/graphrag/*` 代理访问 API（容器内 `http://api:8000`）。
+- `.env` 不配 LLM 时自动降级为离线骨架模式，容器照常启动。
+- 可选基础设施（Qdrant / Langfuse）见 `infra/docker/docker-compose.dev.yml`；v1 演示栈见 `make legacy-up`（与 v3 共用 8000/3000 端口，勿同时启动）。
 
 ## 检索栈真实化（可选接线）
 
@@ -81,7 +96,7 @@ make api
 ```bash
 make smoke
 # 或
-BASE_URL=http://127.0.0.1:8000 uv run python test_api.py
+BASE_URL=http://127.0.0.1:8000 uv run python scripts/smoke/api.py
 ```
 
 如启用 API key，同时设置 `GRAPHRAG_API_KEY`。
@@ -93,7 +108,7 @@ BASE_URL=http://127.0.0.1:8000 uv run python test_api.py
 - `GRAPHRAG_API_URL`：上游 API 地址
 - `GRAPHRAG_API_KEY`：可选上游 API key
 
-legacy `frontend` 仍兼容 `NEXT_PUBLIC_API_BASE_URL`、`NEXT_PUBLIC_API_URL` 与 `NEXT_PUBLIC_API_BASE`，但不属于默认开发栈。
+legacy `legacy/frontend` 仍兼容 `NEXT_PUBLIC_API_BASE_URL`、`NEXT_PUBLIC_API_URL` 与 `NEXT_PUBLIC_API_BASE`，但不属于默认开发栈。
 
 ## 质量门与确定性评测
 
@@ -115,7 +130,18 @@ uv run --package graphrag-eval python -m graphrag_eval.bench --strict
 
 ## Docker 与 legacy
 
-根 `docker-compose.yml` 仍用于 legacy v1 演示（`backend` + `frontend` + Neo4j）；legacy Web 已纳入根 pnpm 单锁。v3.x 基础设施依赖位于 `infra/docker/docker-compose.dev.yml`。
+Docker 编排统一放在 `infra/docker/`：`docker-compose.dev.yml` 提供 v3.x 基础设施，`docker-compose.legacy.yml` 提供 v1 演示（`legacy/backend` + `legacy/frontend` + Neo4j）。legacy Web 仍使用根 pnpm 单锁。
+
+从仓库根目录启动旧版演示：
+
+```bash
+cp .env.example .env  # 已有 .env 时保留现有配置
+cp legacy/backend/.env.example legacy/backend/.env
+make legacy-up
+# 停止并保留数据卷：make legacy-down
+```
+
+旧路径 `backend/`、`frontend/`、`demo_docs/` 已分别迁入 `legacy/` 与 `examples/`；API 启动脚本为 `scripts/dev/start.sh`，HTTP 冒烟脚本为 `scripts/smoke/api.py`。本地覆盖率结果统一输出到 `artifacts/coverage/`。
 
 迁移背景见：
 

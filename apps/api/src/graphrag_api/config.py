@@ -6,6 +6,7 @@ a ``.env`` file at the project root.
 
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +36,14 @@ class Settings(BaseSettings):
     # co-occurrence rebuild. When missing but corpus_path is set, the API
     # builds offline and writes the artifact back (write-through).
     index_path: Path | None = None
+
+    @field_validator("api_key", mode="after")
+    @classmethod
+    def _empty_string_is_unset(cls, value: str | None) -> str | None:
+        # Compose deployments inject `GRAPHRAG_API_KEY=` as an empty string
+        # when the variable is not configured — that must read as "no key",
+        # not as an auth key that matches nothing.
+        return value or None
 
     # -- optional runtime wiring (all default off -> offline demo mode) ----
     # OpenAI-compatible LLM (DeepSeek / Zhipu / vLLM ...). All three must be

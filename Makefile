@@ -1,6 +1,8 @@
-.PHONY: help install dev test lint fmt typecheck clean api web ingest docker-build ci-activate smoke
+.PHONY: help install dev test lint fmt typecheck clean api web ingest docker-build docker-up docker-down docker-logs ci-activate smoke legacy-up legacy-down
 
-GRAPHRAG_CORPUS_PATH ?= demo_docs
+GRAPHRAG_CORPUS_PATH ?= examples/demo_docs
+LEGACY_COMPOSE = docker compose -p graphrag-copilot --env-file .env -f infra/docker/docker-compose.legacy.yml
+V3_COMPOSE = docker compose -p graphrag-v3 --env-file .env -f infra/docker/docker-compose.v3.yml
 BASE_URL ?= http://127.0.0.1:8000
 export GRAPHRAG_CORPUS_PATH
 export BASE_URL
@@ -15,7 +17,7 @@ install:  ## Install all deps (uv + pnpm)
 api:  ## Run FastAPI dev server on :8000
 	uv run --package graphrag-api uvicorn graphrag_api.main:app --reload --port 8000
 
-ingest:  ## Provision retrieval artifacts: make ingest ARGS="--corpus demo_docs"
+ingest:  ## Provision retrieval artifacts: make ingest ARGS="--corpus examples/demo_docs"
 	uv run --package graphrag-api python -m graphrag_api.ingest $(ARGS)
 
 web:  ## Run Next.js dev server on :3000
@@ -41,15 +43,30 @@ typecheck:  ## Run pyright + tsc
 	pnpm typecheck
 
 smoke:  ## Run API smoke checks against BASE_URL (default http://localhost:8000)
-	uv run python test_api.py
+	uv run python scripts/smoke/api.py
 
-docker-build:  ## Build api + web Docker images
-	docker compose build
+docker-build:  ## Build legacy backend + frontend Docker images
+	$(LEGACY_COMPOSE) build
+
+docker-up:  ## Build & start the v3 api+web stack (LLM keys from .env)
+	$(V3_COMPOSE) up -d --build
+
+docker-down:  ## Stop the v3 stack (keep the api-data volume)
+	$(V3_COMPOSE) down
+
+docker-logs:  ## Tail the v3 stack logs
+	$(V3_COMPOSE) logs -f --tail=100
+
+legacy-up:  ## Run the legacy v1 demonstration stack
+	$(LEGACY_COMPOSE) up -d
+
+legacy-down:  ## Stop the legacy stack (keep volumes)
+	$(LEGACY_COMPOSE) down
 
 ci-activate:  ## Render workflow templates into .github/workflows/ (run once after clone)
 	bash scripts/install-workflows.sh
 
 clean:  ## Remove caches
-	rm -rf .pytest_cache .ruff_cache .coverage coverage.xml htmlcov
+	rm -rf .pytest_cache .ruff_cache artifacts/coverage
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	cd apps/web && rm -rf .next node_modules

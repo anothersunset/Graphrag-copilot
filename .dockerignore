@@ -1,0 +1,26 @@
+.git
+.venv
+.uv-cache
+.pnpm-store
+.zwork
+.idea
+.claude
+.hermes
+.agents
+**/node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.env
+**/.env.local
+**/.env.*.local
+artifacts
+# not referenced by any Dockerfile COPY — keep the build context slim
+legacy
+docs
+eval
+integrations
+infra
+scripts
+**/tsconfig.tsbuildinfo

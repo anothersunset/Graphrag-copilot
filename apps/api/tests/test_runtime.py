@@ -116,3 +116,12 @@ def test_llm_needs_all_three_settings():
     )
     assert client is not None
     assert client._model == "deepseek-chat"
+
+
+def test_empty_api_key_env_reads_as_unset():
+    """Compose deployments inject GRAPHRAG_API_KEY= (empty) when unset —
+    that must not turn auth on with a key that matches nothing."""
+    from graphrag_api.config import Settings
+
+    assert Settings(env="test", api_key="").api_key is None
+    assert Settings(env="test", api_key="secret").api_key == "secret"

@@ -1,0 +1,51 @@
+# v3 application stack: graphrag-api (FastAPI + MCP) + graphrag web (Next.js).
+#
+#   docker compose -p graphrag-v3 --env-file .env -f infra/docker/docker-compose.v3.yml up -d --build
+#
+# LLM credentials come from the repository-root `.env` (gitignored):
+#   GRAPHRAG_LLM_BASE_URL / GRAPHRAG_LLM_API_KEY / GRAPHRAG_LLM_MODEL
+# Without them the API boots into offline skeleton mode (deterministic,
+# no external calls).
+#
+# Optional infrastructure (Qdrant / Langfuse) lives in docker-compose.dev.yml
+# and is independent of this stack.
+#
+# The API persists its index artifact + run store on the `api-data`
+# volume (/data), so restarts keep the built index and /v1/runs history.
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    image: graphrag-v3-api:latest
+    container_name: grc-v3-api
+    ports:
+      - "8000:8000"
+    environment:
+      GRAPHRAG_LLM_BASE_URL: ${GRAPHRAG_LLM_BASE_URL:-}
+      GRAPHRAG_LLM_API_KEY: ${GRAPHRAG_LLM_API_KEY:-}
+      GRAPHRAG_LLM_MODEL: ${GRAPHRAG_LLM_MODEL:-}
+      GRAPHRAG_API_KEY: ${GRAPHRAG_API_KEY:-}
+    volumes:
+      - api-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    image: graphrag-v3-web:latest
+    container_name: grc-v3-web
+    ports:
+      - "3000:3000"
+    environment:
+      GRAPHRAG_API_URL: http://api:8000
+      GRAPHRAG_API_KEY: ${GRAPHRAG_API_KEY:-}
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  api-data:
