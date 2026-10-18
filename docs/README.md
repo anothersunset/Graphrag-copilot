@@ -10,8 +10,16 @@
 ## 顶层文档
 - [`../README.md`](../README.md) — 项目首页
 - [`../CHANGELOG.md`](../CHANGELOG.md) — 版本变更日志
-- [`../PROJECT_STRUCTURE.md`](../PROJECT_STRUCTURE.md) — v1 项目结构（保留中，W4 末归档）
+- [`../PROJECT_STRUCTURE.md`](../PROJECT_STRUCTURE.md) — 当前目录结构与文件归类约定
 - **[backlog.md](backlog.md)** — 待办与交接清单（P0~P3 优先级 + 验收标准，接手先读）
+
+## 开发记录与评测
+
+- [开发记录](development/README.md) — CI、benchmark、索引层与合并核实记录
+- [评测报告](evaluation/eval-report.md) — 50 题评测与口径说明
+- [评测材料](../eval/README.md) — 服务评测脚本、数据集及结果
+
+历史 ADR 与开发记录中的路径描述保留当时语境，当前布局以项目结构说明为准。
 
 ## 阅读顺序建议（面试官 / 新读者）
 1. 先读项目首页 [`../README.md`](../README.md) 了解项目定位与现状

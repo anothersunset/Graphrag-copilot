@@ -54,7 +54,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
-  frontend:
+  legacy/frontend:
     dependencies:
       next:
         specifier: 16.2.10

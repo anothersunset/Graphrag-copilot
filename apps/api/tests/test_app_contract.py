@@ -64,7 +64,7 @@ def test_api_key_and_legacy_deprecation_headers() -> None:
 
 
 def test_ask_fails_closed_without_index(monkeypatch) -> None:
-    # a developer's local .env (e.g. GRAPHRAG_CORPUS_PATH=demo_docs) must
+    # a developer's local .env (e.g. GRAPHRAG_CORPUS_PATH=examples/demo_docs) must
     # not silently boot an index inside this "no index configured" test
     from graphrag_api import app as app_module
 

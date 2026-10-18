@@ -15,7 +15,7 @@ FastAPI 0.115 + MCP server for GraphRAG Copilot v3.1.
 ## Run locally
 
 ```bash
-GRAPHRAG_CORPUS_PATH=demo_docs \
+GRAPHRAG_CORPUS_PATH=examples/demo_docs \
   uv run --package graphrag-api uvicorn graphrag_api.main:app --reload --port 8000
 ```
 

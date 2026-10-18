@@ -28,5 +28,5 @@ jobs:
           globs: |
             **/*.md
             !**/node_modules/**
-            !backend/**
-            !frontend/**
+            !legacy/backend/**
+            !legacy/frontend/**

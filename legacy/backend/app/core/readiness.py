@@ -44,7 +44,7 @@ def observability_status() -> dict[str, Any]:
         "logging": {
             "status": "ok",
             "level": settings.LOG_LEVEL,
-            "dir": settings.LOG_DIR or "backend/data/logs",
+            "dir": settings.LOG_DIR or "legacy/backend/data/logs",
         },
         "langfuse": {
             "configured": bool(os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")),

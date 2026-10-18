@@ -1,7 +1,7 @@
 """Offline ingestion CLI provisioning the real retrieval stack.
 
     uv run --package graphrag-api python -m graphrag_api.ingest \
-        --corpus demo_docs --out-dir data/index
+        --corpus examples/demo_docs --out-dir data/index
 
 Pipeline: load corpus docs → semantic fine-chunking → build the in-memory
 KG (co-occurrence; LLM extraction lands later) → embed + upsert to Qdrant →

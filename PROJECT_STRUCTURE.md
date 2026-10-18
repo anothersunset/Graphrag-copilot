@@ -1,52 +1,65 @@
 # GraphRAG Copilot — 项目结构（当前快照）
 
-> 本文件描述 **`main` 分支的真实代码布局**，与代码同步维护。v1 单体与 v3.x monorepo 双轨并存，v3.x 是默认开发入口。
+> 本文件描述当前工作区的真实代码布局，与代码同步维护。v1 单体与 v3.x monorepo 双轨并存，v3.x 是默认开发入口。
 >
 > 迁移决策见 [`docs/adr/0001-from-v1-to-v3.1.md`](docs/adr/0001-from-v1-to-v3.1.md)、[`docs/adr/0002-monorepo-container.md`](docs/adr/0002-monorepo-container.md)；8 周路线图见 [`docs/architecture/migration-roadmap.md`](docs/architecture/migration-roadmap.md)；待办清单见 [`docs/backlog.md`](docs/backlog.md)。
 
-## 顶层布局（双轨：v1 legacy + v3.x monorepo）
+## 顶层布局
 
-```
+```text
 Graphrag-copilot/
-├── apps/                            # v3.x monorepo — uv workspace 成员
-│   ├── api/                         # graphrag-api（FastAPI + MCP server）
-│   └── web/                         # @graphrag/web（Next.js 15 + React 19）
-│
-├── packages/                        # v3.x monorepo — uv workspace 成员（7 个）
-│   ├── schemas/                     # graphrag-schemas（Pydantic 类型中枢）
-│   ├── retrieval/                   # graphrag-retrieval（Qdrant/BM25/Neo4j/社区/web + BGE rerank）
-│   ├── parsers/                     # graphrag-parsers（语义切分 + late chunking）
-│   ├── kg/                          # graphrag-kg（gleaning 抽取/消歧/Louvain/PPR，networkx 内存图）
-│   ├── graph/                       # graphrag-graph（LangGraph 7 节点 + CRAG + claims + DSPy auditor）
-│   ├── observability/               # graphrag-observability（Langfuse tracer + spans）
-│   └── eval/                        # graphrag-eval（确定性 bench + RAGAS/DeepEval 适配 + adversarial）
-│
+├── apps/                            # 正式应用
+│   ├── api/                         # FastAPI + MCP；src/ 与 tests/ 同包管理
+│   └── web/                         # Next.js Web
+├── packages/                        # 7 个共享 Python 包，各自保留 src/ 与 tests/
+│   ├── schemas/
+│   ├── retrieval/
+│   ├── parsers/
+│   ├── kg/
+│   ├── graph/
+│   ├── observability/
+│   └── eval/                        # 确定性评测库与 bench CLI
+├── legacy/                          # 兼容演示应用，与正式应用隔离
+│   ├── backend/                     # v1 API、测试、配置及原有数据/索引
+│   └── frontend/                    # v1 Web，仍使用根 pnpm 单锁
+├── examples/
+│   └── demo_docs/                   # make api 默认演示语料
+├── eval/                            # 服务评测脚手架、datasets/、prompts/、tests/、results/
+├── integrations/
+│   └── notion/                      # 外部同步数据快照及接入说明
 ├── docs/
-│   ├── adr/                         # 架构决策记录（ADR-0001 v1→v3.1、ADR-0002 monorepo）
-│   ├── architecture/                # v3.1 final spec / 迁移路线图 / provenance / W2 设计
-│   ├── backlog.md                   # 待办与交接清单（P0~P3 优先级）
-│   ├── devlog-*.md                  # 4 篇开发记录（CI 修复 / benchmark / KG 索引层 / 合并核实）
-│   └── eval-report.md               # 50 题评测报告（含遗留项）
-│
+│   ├── adr/                         # 架构决策
+│   ├── architecture/                # 技术规格、迁移路线与发布流程
+│   ├── development/                 # 历史开发记录
+│   ├── evaluation/                  # 评测报告
+│   ├── backlog.md                   # 待办与交接
+│   └── README.md                    # 文档导航
 ├── infra/
-│   ├── docker/                      # docker-compose.dev.yml（Qdrant + Neo4j + Langfuse）
-│   └── workflows-template/          # CI YAML 模板（*.tmpl，make ci-activate 激活）
-│
+│   ├── docker/                      # dev 与 legacy Docker Compose
+│   └── workflows-template/          # GitHub Actions 模板
 ├── scripts/
-│   └── install-workflows.sh         # 渲染 CI 模板到 .github/workflows/
-│
-├── eval/                            # v1 旧评测脚本 + eval/results/（v3.2 基线与结果持久化）
-│
-├── backend/                         # v1 legacy — FastAPI 5-Agent 单体（仍可独立 demo）
-├── frontend/                        # v1 legacy — Next.js 前端（仍可独立 demo）
-├── demo_docs/                       # v3.x 默认演示语料（GRAPHRAG_CORPUS_PATH 默认值）
-├── docker-compose.yml               # v1 legacy — 三容器编排（Neo4j + backend + frontend）
-├── start.sh / test_api.py           # v1 一键启动 + v3 smoke（/healthz /v1/ask 契约）
-│
-├── Makefile                         # 统一入口：install / api / web / ingest / test / lint / typecheck / smoke
-├── pyproject.toml                   # uv workspace 根 + ruff/pyright/pytest/coverage 配置
-└── README.md                        # 项目主文档（含检索栈接线环境变量表）
+│   ├── dev/start.sh                 # 从任意工作目录启动正式 API
+│   ├── smoke/api.py                 # 正式 API 的 HTTP 冒烟检查
+│   └── install-workflows.sh         # 渲染模板到 .github/workflows/
+├── artifacts/coverage/              # 本地覆盖率产物，不入库
+├── .github/                         # 工作流、依赖更新与协作配置
+├── Makefile                         # 安装、开发、质量门、legacy 编排统一入口
+├── pyproject.toml / uv.lock         # Python workspace 与依赖锁
+├── package.json / pnpm-*.yaml       # JavaScript workspace、脚本与依赖锁
+├── .env.example                     # 根环境变量示例
+├── README.md / PROJECT_STRUCTURE.md # 项目入口与结构说明
+└── CONTRIBUTING.md / CHANGELOG.md / LICENSE
 ```
+
+## 文件归类约定
+
+- 应用代码放 `apps/<app>/src/`，共享能力放 `packages/<package>/src/`；单元测试随应用或包放在 `tests/`，保留现有导入边界。
+- v1 应用及其运行数据放 `legacy/`；本次仅搬迁目录，仍保留对共享包的依赖。
+- 跨服务评测材料放 `eval/`；可重复分发的演示输入放 `examples/`。
+- 自动化脚本放 `scripts/`，部署配置放 `infra/`，外部同步快照放 `integrations/`。
+- 开发记录放 `docs/development/`，评测说明放 `docs/evaluation/`。历史 ADR、开发记录和 CHANGELOG 中的旧路径保留当时语境；当前路径以本文件为准。
+- 覆盖率产物放 `artifacts/coverage/`。`.venv/`、`node_modules/`、`.next/`、各工具缓存和编辑器配置保留工具要求的位置，不作为业务代码归档。
+- 根目录保留工作区配置、依赖锁、环境入口、许可证与项目导航；不放散落的业务脚本。
 
 ## v3.x monorepo 详图
 
@@ -117,7 +130,7 @@ apps/web (Next.js) ─同源代理─> FastAPI /v1/ask (app.py: execute)
 
 ## CI / 工作流哨兵模式
 
-仓库根目录**没有** `.github/workflows/`。CI 配置以模板形式存放在 `infra/workflows-template/*.tmpl`，由仓库 owner 一次性执行 `make ci-activate` 渲染后推送。本地质量门：`make test && make lint && make typecheck`（coverage 门 `fail_under=70`）；确定性评测门：`uv run --package graphrag-eval python -m graphrag_eval.bench --strict`。
+CI 模板存放在 `infra/workflows-template/*.tmpl`，执行 `make ci-activate` 同步到已纳入版本管理的 `.github/workflows/` 后一并提交。本地质量门：`make test && make lint && make typecheck`（coverage 门 `fail_under=70`）；确定性评测门：`uv run --package graphrag-eval python -m graphrag_eval.bench --strict`。
 
 ## 技术栈快照（v3.x）
 
@@ -139,9 +152,9 @@ apps/web (Next.js) ─同源代理─> FastAPI /v1/ask (app.py: execute)
 ## v1 legacy 子树（保留以供回归对照）
 
 ```
-backend/  app/{agents,api,services,utils} + config + tests + main.py
-frontend/ src/app/{chat,graph,status,upload} + Tailwind 4
+legacy/backend/  app/{agents,api,services,utils} + config + tests + main.py
+legacy/frontend/ src/app/{chat,graph,status,upload} + Tailwind 4
 eval/     questions.json + run_eval.py（旧 5 题口径；v3 契约评测用 graphrag_eval.bench）
 ```
 
-v1 仍可通过仓库根 `docker-compose.yml` 独立启动。注意：`backend/app/agents/orchestrator.py` 已反向接入 v3 `packages/graph`，归档 v1 时需先解耦（见 backlog P3）。
+v1 编排位于 `infra/docker/docker-compose.legacy.yml`，从根目录执行 `make legacy-up` 启动。注意：`legacy/backend/app/agents/orchestrator.py` 已反向接入 v3 `packages/graph`，归档 v1 时需先解耦（见 backlog P3）。

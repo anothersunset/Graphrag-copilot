@@ -21,7 +21,7 @@ DATASETS = [
     REPO / "eval/datasets/benchmark_20.jsonl",
     REPO / "eval/datasets/benchmark_50.jsonl",
 ]
-CORPUS = REPO / "backend/data/vector_db/bm25_documents.json"
+CORPUS = REPO / "legacy/backend/data/vector_db/bm25_documents.json"
 
 
 def _dataset_gold_ids(path: Path) -> set[str]:

@@ -2,6 +2,14 @@
 
 Local development infrastructure for GraphRAG Copilot v3.1.
 
+The v1 demonstration stack is in `docker-compose.legacy.yml`. From the repository
+root, copy `.env.example` to `.env` and `legacy/backend/.env.example` to
+`legacy/backend/.env` if those files do not exist, then run `make legacy-up`.
+Use `make legacy-down` to stop it while preserving volumes. The equivalent
+Compose prefix is `docker compose -p graphrag-copilot --env-file .env -f infra/docker/docker-compose.legacy.yml`;
+the explicit project name preserves the original root stack's named volumes.
+Build contexts and bind mounts are resolved relative to this directory.
+
 ## Bring up
 
 ```bash

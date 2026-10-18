@@ -17,6 +17,7 @@ build/
 uv.lock
 
 # Test / coverage
+artifacts/
 .pytest_cache/
 .coverage
 coverage.xml

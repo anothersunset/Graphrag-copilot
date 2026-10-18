@@ -1,6 +1,6 @@
 # 📋 待办与交接清单（Backlog）
 
-> 整理于 2026-09-23，基于：4 篇 devlog、`docs/eval-report.md`、git 历史、
+> 整理于 2026-09-23，基于：4 篇 devlog、`docs/evaluation/eval-report.md`、git 历史、
 > 双线深度分析（代码/架构 + 进度/dev 记录），以及 2026-09-23 已完成的
 > 「检索栈真实化」第一阶段工作。每项标注优先级、证据位置与验收标准。
 > 完成一项就把它移到文末「已完成」区并注明日期。
@@ -42,7 +42,7 @@
 - 真实环境端到端验证：Qdrant 容器（`infra/docker/docker-compose.dev.yml`）
   + 真实 embedding 模型跑一次 `make ingest` + `make api` + smoke，
   确认 `/readyz` wiring 上报 `VectorRetriever`、答案引用来自 vector 路。
-- ~~LLM 抽取/摘要质量评测~~ ✅ 已完成（2026-10-10，glm-4-flash，demo_docs）：
+- ~~LLM 抽取/摘要质量评测~~ ✅ 已完成（2026-10-10，glm-4-flash，examples/demo_docs）：
   实体 30→76、边 60→73（含 PART_OF/USES/WORKS_FOR 语义类型）、
   社区 4→11；PPR top-2 检索与小语料基线等价，但图谱语义丰富度显著更高
   （概念级实体如「知识分级与权限隔离」「跨文档多跳推理」）；
@@ -54,7 +54,7 @@
 ### 5. 复核 boundary refusal 指标口径
 - **问题**：Boundary Refusal Rate 从早期口径 0.8333 掉到最终评测 0.08，
   且 `46b50e4` 用了 "relaxed post-check"，疑似口径漂移而非真实回退。
-- **证据**：`docs/devlog-2026-06-11-benchmark-evaluation.md` §4。
+- **证据**：`docs/development/devlog-2026-06-11-benchmark-evaluation.md` §4。
 - **验收**：明确口径定义并固定进 `packages/eval`；如属实回退则修复。
 
 ---
@@ -62,7 +62,7 @@
 ## P2 — 评测体系与发布兑现
 
 ### 6. 人工抽检 + 外部数据集对标
-- `docs/eval-report.md` §6.5/§7.1/§7.2：人工抽检（10~20 题、Cohen's kappa）
+- `docs/evaluation/eval-report.md` §6.5/§7.1/§7.2：人工抽检（10~20 题、Cohen's kappa）
   未执行；MultiHop-RAG / HotpotQA 等外部集对标全空。
 - 顺带：crossdoc 仍是短板题型（最高 ~0.69），可在抽检中重点覆盖。
 
@@ -90,8 +90,8 @@
 | ~~文档漂移~~ ✅ 2026-09-24 | `PROJECT_STRUCTURE.md` 已按真实文件布局重写 | 根目录 |
 | ~~空壳包~~ ✅ 2026-09-24 | `packages/reranker`、`packages/retriever` 已删除（uv.lock 已同步） | — |
 | dependabot 分支堆 | 远端 14 个分支待处置（合并或关闭） | origin |
-| v1 legacy 归档 | ADR-0001 约定的时间表未执行；注意 `backend/app/agents/orchestrator.py` 已反向依赖 v3 `packages/graph`，归档时需解耦 | `backend/`、`frontend/` |
-| ~~敏感默认值~~ ✅ 2026-09-24 | v1 compose 的 `NEO4J_PASSWORD` 已参数化（默认值标注为公开样例）；langfuse dev secret 加覆盖指引 | `docker-compose.yml`、`infra/docker/` |
+| v1 legacy 解耦与退役 | 2026-10-17 已集中到 `legacy/`；`legacy/backend/app/agents/orchestrator.py` 仍依赖 v3 `packages/graph`，移除前需解耦 | `legacy/backend/`、`legacy/frontend/` |
+| ~~敏感默认值~~ ✅ 2026-09-24 | v1 compose 的 `NEO4J_PASSWORD` 已参数化（默认值标注为公开样例）；langfuse dev secret 加覆盖指引 | `infra/docker/docker-compose.legacy.yml`、`infra/docker/` |
 | planner 启发式泛化 | 中文关键词表硬编码，跨语言/领域弱；可评估用已接线的 LLM 兜底路径替代 | `packages/graph/src/graphrag_graph/nodes/planner.py` |
 
 ---
@@ -100,12 +100,12 @@
 
 ```bash
 make install        # uv sync --all-packages --dev + pnpm install --frozen-lockfile
-make api            # FastAPI :8000（默认 demo_docs，离线即可用）
+make api            # FastAPI :8000（默认 examples/demo_docs，离线即可用）
 make web            # Next.js :3000
 make smoke          # /healthz /readyz /v1/ask 契约验收
 make test && make lint && make typecheck
 uv run --package graphrag-eval python -m graphrag_eval.bench --strict
-make ingest ARGS="--corpus demo_docs --out-dir data/index --skip-qdrant"  # 灌库（离线模式）
+make ingest ARGS="--corpus examples/demo_docs --out-dir data/index --skip-qdrant"  # 灌库（离线模式）
 ```
 
 - 检索栈接线环境变量表：根 `README.md`「检索栈真实化」一节。
@@ -126,7 +126,7 @@ make ingest ARGS="--corpus demo_docs --out-dir data/index --skip-qdrant"  # 灌�
   34 个语义 ID 映射经人工通读 60 chunks 标注并有完整性单测守护；
   50 题离线重跑 Recall@5 = 0.4716（修复前恒 0），45/50 题 > 0；
   新基线 `eval/results/real_eval_baseline_offline_2026-09-23.json`，
-  历史结果文件未动。详见 `docs/eval-report.md` §6.0.0。
+  历史结果文件未动。详见 `docs/evaluation/eval-report.md` §6.0.0。
 - [x] 2026-09-23 检索栈真实化第一阶段：可选接线 + 灌库 CLI +
   `/readyz` 如实上报（本文件「当前状态快照」所述质量门全绿）。
 - [x] 2026-07-09 合并核实与 2 处静默 bug 修复（devlog-2026-07-09）。

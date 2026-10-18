@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
   backend:
     build:
-      context: ./backend
+      context: ../../legacy/backend
       dockerfile: Dockerfile
     container_name: graphrag-backend
     ports:
@@ -26,8 +26,8 @@ services:
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-graphrag123}
     volumes:
-      - ./backend/data:/app/data
-      - ./backend/.env:/app/.env
+      - ../../legacy/backend/data:/app/data
+      - ../../legacy/backend/.env:/app/.env
     depends_on:
       - neo4j
     healthcheck:
@@ -39,8 +39,8 @@ services:
     restart: unless-stopped
   frontend:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile
+      context: ../..
+      dockerfile: legacy/frontend/Dockerfile
     container_name: graphrag-frontend
     ports:
       - "3000:3000"

@@ -259,7 +259,7 @@ class QueryResult:
 
 修复内容：
 
-- `backend/app/agents/retriever_adapters.py` 新增 `_stable_chunk_id()`：
+- `legacy/backend/app/agents/retriever_adapters.py` 新增 `_stable_chunk_id()`：
   从 `file_name` + `chunk_index` 派生稳定 ID（`{file_name}#{chunk_index}`），
   vector/BM25 两路共享同一格式；上传路径（`routes.py`）同步写入该字段。
 - `eval/graphrag_client.py`：`retrieved_ids` 改读 source 顶层 `chunk_id`

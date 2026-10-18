@@ -1,7 +1,7 @@
 # Legacy frontend (v1)
 
-This Next.js application is retained only for the legacy `backend/` and root
-`docker-compose.yml` demonstration stack. It is not the supported GraphRAG
+This Next.js application is retained only for `legacy/backend/` and the
+`infra/docker/docker-compose.legacy.yml` demonstration stack. It is not the supported GraphRAG
 Copilot product entrypoint.
 
 - Supported web application: `apps/web`

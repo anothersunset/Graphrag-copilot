@@ -51,10 +51,9 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# Root-anchored path on purpose: the Notion sync bot owns repo-root src/,
-# its output isn't real Python (currently a bare `null`). apps/*/src and
-# packages/*/src are NOT affected — verified via a deliberate F401 probe.
-extend-exclude = ["backend", "frontend", "eval", "demo_docs", "src/notion_generated.py"]
+# Legacy applications and service-dependent evaluation scripts have their
+# own maintenance scope. Integration snapshots are data, not Python sources.
+extend-exclude = ["legacy", "eval", "examples", "artifacts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
@@ -75,13 +74,12 @@ indent-style = "space"
 # ──────────────────────────────── Pyright ────────────────────────────
 [tool.pyright]
 include = ["apps", "packages"]
-exclude = ["**/node_modules", "**/__pycache__", "**/.venv", "backend", "frontend", "eval"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.venv", "legacy", "eval"]
 venvPath = "."
 venv = ".venv"
 extraPaths = [
   "apps/api/src",
   "packages/eval/src",
-  "packages/evals/src",
   "packages/graph/src",
   "packages/kg/src",
   "packages/observability/src",
@@ -107,6 +105,7 @@ markers = [
 ]
 
 [tool.coverage.run]
+data_file = "artifacts/coverage/.coverage"
 source = ["apps", "packages"]
 branch = true
 omit = ["*/tests/*", "*/__main__.py"]
@@ -114,3 +113,9 @@ omit = ["*/tests/*", "*/__main__.py"]
 [tool.coverage.report]
 show_missing = true
 fail_under = 70  # spec floor; actual coverage is ~83% (W8 fulfilled)
+
+[tool.coverage.xml]
+output = "artifacts/coverage/coverage.xml"
+
+[tool.coverage.html]
+directory = "artifacts/coverage/html"

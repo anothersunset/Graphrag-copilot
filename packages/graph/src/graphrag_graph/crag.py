@@ -43,7 +43,7 @@ class CragScorer:
     """Pluggable CRAG scorer.
 
     Thresholds (tuned after the 50-question benchmark — see
-    ``docs/devlog-2026-06-11-benchmark-evaluation.md`` §2.1/2.11; the
+    ``docs/development/devlog-2026-06-11-benchmark-evaluation.md`` §2.1/2.11; the
     original v3.1 spec values of 0.7/0.3/0.5 routed 49/50 questions to
     ``use`` and never exercised rewrite/fallback):
       * score >= 0.5        → ``use``
