@@ -1,7 +1,7 @@
 """Verify BM25Store persists its index and reloads it after restart.
 
 以前 BM25 是纯内存索引，重启必须重新 fit。持久化修复后：
-  - add_documents 后会写入 bm25.pkl + bm25_documents.json
+  - add_documents 后会写入 bm25_corpus.json + bm25_documents.json
   - 新实例初始化时会从磁盘重建 rank_bm25 索引和文档集
 """
 from config.settings import settings
@@ -31,9 +31,9 @@ def test_bm25_persists_to_disk_and_reloads(tmp_path, monkeypatch):
     store1 = BM25Store()
     store1.add_documents(docs)
 
-    pkl_path = tmp_path / "bm25.pkl"
+    corpus_path = tmp_path / "bm25_corpus.json"
     docs_path = tmp_path / "bm25_documents.json"
-    assert pkl_path.exists(), "add_documents 后应该写入 bm25.pkl"
+    assert corpus_path.exists(), "add_documents 后应该写入 bm25_corpus.json"
     assert docs_path.exists(), "add_documents 后应该写入 bm25_documents.json"
 
     # 冷启动：新实例从磁盘 reload

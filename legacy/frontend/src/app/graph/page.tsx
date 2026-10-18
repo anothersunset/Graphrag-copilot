@@ -1,37 +1,28 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type {
-  ForceGraphMethods,
-  GraphData as ForceGraphData,
-  LinkObject,
-  NodeObject,
-} from "react-force-graph-2d";
 import { useEffect, useRef, useState, useMemo, useCallback, CSSProperties } from "react";
-import { API_BASE } from "@/lib/api";
 import ControlPanel from "./ControlPanel";
 import {
   GraphData,
-  GraphLink,
   GraphNode,
   GraphSettings,
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
   EntityNeighborsResponse,
+  getThemeColors,
+  FALLBACK_COLOR,
+  MINIMAP_SIZE,
+  MINIMAP_MARGIN,
+  MINIMAP_BG,
+  MINIMAP_BORDER,
+  MINIMAP_VIEWPORT_COLOR,
+  MINIMAP_NODE_RADIUS,
 } from "./types";
 
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
-  ssr: false,
-}) as typeof import("react-force-graph-2d").default;
+const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
-export const TYPE_COLOR: Record<string, string> = {
-  Technology: "#7C5CFF",
-  Concept: "#FF6BD6",
-  Organization: "#FFB454",
-  Product: "#4ECDC4",
-  Document: "#9AA0A6",
-  Event: "#F25C54",
-};
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
 //
 // === Layout styles ===
@@ -151,22 +142,70 @@ const DETAIL_ITEM_META_STYLE: CSSProperties = {
   flexShrink: 0,
 };
 
+const SEARCH_WRAP_STYLE: CSSProperties = {
+  position: "absolute",
+  top: 16,
+  left: 16,
+  zIndex: 10,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const SEARCH_MATCH_STYLE: CSSProperties = {
+  fontSize: 11,
+  color: "rgba(255,255,255,0.5)",
+  whiteSpace: "nowrap",
+  fontVariantNumeric: "tabular-nums",
+};
+
+const MINIMAP_CONTAINER_STYLE: CSSProperties = {
+  position: "absolute",
+  bottom: MINIMAP_MARGIN,
+  left: MINIMAP_MARGIN,
+  zIndex: 15,
+  width: MINIMAP_SIZE,
+  height: MINIMAP_SIZE,
+  borderRadius: 8,
+  overflow: "hidden",
+  border: MINIMAP_BORDER,
+  background: MINIMAP_BG,
+};
+
+const MINIMAP_CANVAS_STYLE: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  display: "block",
+};
+
 export default function GraphPage() {
-  const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined);
+  const fgRef = useRef<any>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const minimapCanvasRef = useRef<HTMLCanvasElement>(null);
   const [data, setData] = useState<GraphData>({ nodes: [], links: [], status: "" });
   const [hoverNode, setHoverNode] = useState<GraphNode | null>(null);
   const [query, setQuery] = useState("");
-  const [settings, setSettings] = useState<GraphSettings>(() => {
-    if (typeof window === "undefined") return DEFAULT_SETTINGS;
-    try {
-      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-      return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : DEFAULT_SETTINGS;
-    } catch {
-      return DEFAULT_SETTINGS;
-    }
-  });
+  const [searchIndex, setSearchIndex] = useState(0);
+  const [settings, setSettings] = useState<GraphSettings>(DEFAULT_SETTINGS);
   const [detailEntity, setDetailEntity] = useState<EntityNeighborsResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // 动态颜色主题
+  const typeColor = useMemo<Record<string, string>>(
+    () => getThemeColors(settings.colorTheme),
+    [settings.colorTheme]
+  );
+
+  // 读取本地保存的设置
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (raw) setSettings(Object.assign({}, DEFAULT_SETTINGS, JSON.parse(raw)));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // 持久化设置
   useEffect(() => {
@@ -191,8 +230,7 @@ export default function GraphPage() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void fetchGraph(), 0);
-    return () => window.clearTimeout(timer);
+    fetchGraph();
   }, [fetchGraph]);
 
   // 实时应用力度参数
@@ -226,19 +264,30 @@ export default function GraphPage() {
     if (!settings.showOrphans) nodes = nodes.filter((n) => (n.degree ?? 0) > 0);
     const keep = new Set(nodes.map((n) => n.id));
     const links = data.links.filter((l) => {
-      const s = typeof l.source === "object" ? l.source.id : l.source;
-      const t = typeof l.target === "object" ? l.target.id : l.target;
+      const s = typeof l.source === "object" ? (l.source as any).id : l.source;
+      const t = typeof l.target === "object" ? (l.target as any).id : l.target;
       return keep.has(s) && keep.has(t);
     });
     return { nodes, links, status: data.status };
   }, [data, settings.showAttachments, settings.onlyCreatedNotes, settings.showOrphans]);
 
+  // 搜索匹配节点（Feature C）
+  const matchedNodes = useMemo(() => {
+    if (!query) return [];
+    return filteredData.nodes.filter((n) => n.label.includes(query));
+  }, [query, filteredData.nodes]);
+
+  // 查询变化时重置搜索索引
+  useEffect(() => {
+    setSearchIndex(0);
+  }, [query]);
+
   // 邻居索引用于悬停高亮
   const neighbors = useMemo(() => {
     const m = new Map<string, Set<string>>();
     filteredData.links.forEach((l) => {
-      const s = typeof l.source === "object" ? l.source.id : l.source;
-      const t = typeof l.target === "object" ? l.target.id : l.target;
+      const s = typeof l.source === "object" ? (l.source as any).id : l.source;
+      const t = typeof l.target === "object" ? (l.target as any).id : l.target;
       if (!m.has(s)) m.set(s, new Set());
       if (!m.has(t)) m.set(t, new Set());
       m.get(s)!.add(t);
@@ -249,15 +298,14 @@ export default function GraphPage() {
 
   const isHighlighted = useCallback(
     (id: string) => {
-      if (!hoverNode) {
-        return query
-          ? filteredData.nodes.some((n) => n.id === id && n.label.includes(query))
-          : true;
+      if (hoverNode) {
+        if (id === hoverNode.id) return true;
+        return neighbors.get(hoverNode.id)?.has(id) ?? false;
       }
-      if (id === hoverNode.id) return true;
-      return neighbors.get(hoverNode.id)?.has(id) ?? false;
+      if (query) return matchedNodes.some((n) => n.id === id);
+      return true;
     },
-    [hoverNode, neighbors, query, filteredData.nodes]
+    [hoverNode, neighbors, query, matchedNodes]
   );
 
   // 节点跳转 / 打开详情
@@ -298,7 +346,7 @@ export default function GraphPage() {
   // 单击居中聚焦,双击跳转/打开详情
   const lastClickRef = useRef<{ id: string; t: number }>({ id: "", t: 0 });
   const handleNodeClick = useCallback(
-    (node: NodeObject<GraphNode>) => {
+    (node: any) => {
       fgRef.current?.centerAt(node.x, node.y, 600);
       fgRef.current?.zoom(2.2, 600);
       const now = Date.now();
@@ -308,6 +356,136 @@ export default function GraphPage() {
       lastClickRef.current = { id: node.id, t: now };
     },
     [openNodeSource]
+  );
+
+  // -- 小地图绘制（Feature B） --
+  const onRenderFramePost = useCallback(
+    (_ctx: CanvasRenderingContext2D, _globalScale: number) => {
+      if (!settings.showMinimap) return;
+      const miniCanvas = minimapCanvasRef.current;
+      if (!miniCanvas) return;
+      const fg = fgRef.current;
+      if (!fg) return;
+      const miniCtx = miniCanvas.getContext("2d");
+      if (!miniCtx) return;
+
+      const mw = MINIMAP_SIZE;
+      const mh = MINIMAP_SIZE;
+      const bbox = fg.getGraphBbox();
+      if (!bbox || bbox.x[1] === bbox.x[0] || bbox.y[1] === bbox.y[0]) return;
+
+      const gxRange = bbox.x[1] - bbox.x[0];
+      const gyRange = bbox.y[1] - bbox.y[0];
+      const pad = 0.08;
+      const gxMin = bbox.x[0] - gxRange * pad;
+      const gxMax = bbox.x[1] + gxRange * pad;
+      const gyMin = bbox.y[0] - gyRange * pad;
+      const gyMax = bbox.y[1] + gyRange * pad;
+      const gxSpan = gxMax - gxMin;
+      const gySpan = gyMax - gyMin;
+
+      const scaleX = mw / gxSpan;
+      const scaleY = mh / gySpan;
+      const sc = Math.min(scaleX, scaleY);
+      const ox = (mw - gxSpan * sc) / 2;
+      const oy = (mh - gySpan * sc) / 2;
+      const toX = (gx: number) => ox + (gx - gxMin) * sc;
+      const toY = (gy: number) => oy + (gy - gyMin) * sc;
+
+      miniCtx.clearRect(0, 0, mw, mh);
+
+      // 连线
+      miniCtx.strokeStyle = "rgba(255,255,255,0.06)";
+      miniCtx.lineWidth = 0.3;
+      data.links.forEach((l) => {
+        const s = typeof l.source === "object" ? l.source as any : null;
+        const t = typeof l.target === "object" ? l.target as any : null;
+        if (!s || !t) return;
+        miniCtx.beginPath();
+        miniCtx.moveTo(toX(s.x ?? 0), toY(s.y ?? 0));
+        miniCtx.lineTo(toX(t.x ?? 0), toY(t.y ?? 0));
+        miniCtx.stroke();
+      });
+
+      // 节点
+      data.nodes.forEach((n: any) => {
+        if (n.x == null || n.y == null) return;
+        miniCtx.beginPath();
+        miniCtx.arc(toX(n.x), toY(n.y), MINIMAP_NODE_RADIUS, 0, 2 * Math.PI);
+        miniCtx.fillStyle = typeColor[n.type] ?? FALLBACK_COLOR;
+        miniCtx.fill();
+      });
+
+      // 视口矩形
+      const shellEl = shellRef.current;
+      if (!shellEl) return;
+      const shW = shellEl.clientWidth;
+      const shH = shellEl.clientHeight;
+      const tl = fg.screen2GraphCoords(0, 0);
+      const br = fg.screen2GraphCoords(shW, shH);
+      const vx1 = Math.min(tl.x, br.x);
+      const vy1 = Math.min(tl.y, br.y);
+      const vx2 = Math.max(tl.x, br.x);
+      const vy2 = Math.max(tl.y, br.y);
+
+      miniCtx.strokeStyle = MINIMAP_VIEWPORT_COLOR;
+      miniCtx.lineWidth = 1;
+      miniCtx.strokeRect(toX(vx1), toY(vy1), Math.max(2, (vx2 - vx1) * sc), Math.max(2, (vy2 - vy1) * sc));
+    },
+    [settings.showMinimap, data.nodes, data.links, typeColor]
+  );
+
+  // -- 小地图点击跳转 --
+  const handleMinimapClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const fg = fgRef.current;
+      if (!fg) return;
+      const canvas = minimapCanvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      const bbox = fg.getGraphBbox();
+      if (!bbox) return;
+      const gxRange = bbox.x[1] - bbox.x[0];
+      const gyRange = bbox.y[1] - bbox.y[0];
+      const pad = 0.08;
+      const gxMin = bbox.x[0] - gxRange * pad;
+      const gxMax = bbox.x[1] + gxRange * pad;
+      const gyMin = bbox.y[0] - gyRange * pad;
+      const gyMax = bbox.y[1] + gyRange * pad;
+      const gxSpan = gxMax - gxMin;
+      const gySpan = gyMax - gyMin;
+      const scaleX = MINIMAP_SIZE / gxSpan;
+      const scaleY = MINIMAP_SIZE / gySpan;
+      const sc = Math.min(scaleX, scaleY);
+      const ox = (MINIMAP_SIZE - gxSpan * sc) / 2;
+      const oy = (MINIMAP_SIZE - gySpan * sc) / 2;
+
+      const gx = (mx - ox) / sc + gxMin;
+      const gy = (my - oy) / sc + gyMin;
+      fg.centerAt(gx, gy, 400);
+    },
+    []
+  );
+
+  // -- 搜索 Enter 循环（Feature C） --
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key !== "Enter" || matchedNodes.length === 0) return;
+      const idx = e.shiftKey
+        ? (searchIndex - 1 + matchedNodes.length) % matchedNodes.length
+        : searchIndex;
+      const target = matchedNodes[idx] as any;
+      if (target && fgRef.current && typeof target.x === "number" && typeof target.y === "number") {
+        fgRef.current.centerAt(target.x, target.y, 600);
+        fgRef.current.zoom(2.2, 600);
+      }
+      setSearchIndex(e.shiftKey ? idx : (searchIndex + 1) % matchedNodes.length);
+    },
+    [matchedNodes, searchIndex]
   );
 
   const stats = useMemo(
@@ -338,15 +516,25 @@ export default function GraphPage() {
       </div>
 
       {/* 画布容器：内联 style 保证高度/背景/相对定位一定生效 */}
-      <div style={SHELL_STYLE}>
-        {/* 搜索框 */}
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索实体..."
-          style={SEARCH_STYLE}
-        />
+      <div style={SHELL_STYLE} ref={shellRef}>
+        {/* 搜索框 + 匹配计数 */}
+        <div style={SEARCH_WRAP_STYLE}>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="搜索实体（Enter 循环定位）..."
+            style={SEARCH_STYLE}
+          />
+          {query && (
+            <span style={SEARCH_MATCH_STYLE}>
+              {matchedNodes.length > 0
+                ? `${((searchIndex - 1 + matchedNodes.length) % matchedNodes.length) + 1}/${matchedNodes.length}`
+                : "0/0"}
+            </span>
+          )}
+        </div>
 
         {/* 右侧设置面板（含颜色组 / 筛选 / 外观 / 力度） */}
         <ControlPanel
@@ -354,8 +542,22 @@ export default function GraphPage() {
           onChange={setSettings}
           onReplay={() => fgRef.current?.d3ReheatSimulation()}
           onReset={() => setSettings(DEFAULT_SETTINGS)}
-          typeColor={TYPE_COLOR}
+          typeColor={typeColor}
         />
+
+        {/* 小地图 */}
+        {settings.showMinimap && filteredData.nodes.length > 0 && (
+          <div style={MINIMAP_CONTAINER_STYLE}>
+            <canvas
+              ref={minimapCanvasRef}
+              width={MINIMAP_SIZE}
+              height={MINIMAP_SIZE}
+              style={MINIMAP_CANVAS_STYLE}
+              onClick={handleMinimapClick}
+              data-minimap="true"
+            />
+          </div>
+        )}
 
         {/* 实体详情面板 */}
         {detailEntity && (
@@ -382,13 +584,8 @@ export default function GraphPage() {
                   <li
                     key={n.name}
                     onClick={() => {
-      const target = filteredData.nodes.find((x) => x.id === n.name) as NodeObject<GraphNode> | undefined;
-                      if (
-                        target &&
-                        fgRef.current &&
-                        typeof target.x === "number" &&
-                        typeof target.y === "number"
-                      ) {
+                      const target = filteredData.nodes.find((x) => x.id === n.name) as any;
+                      if (target && fgRef.current && target.x !== undefined) {
                         fgRef.current.centerAt(target.x, target.y, 600);
                         fgRef.current.zoom(2.4, 600);
                       }
@@ -411,28 +608,33 @@ export default function GraphPage() {
             {data.status === "disconnected" ? "Neo4j 未连接" : "加载图谱数据中..."}
           </div>
         ) : (
-          <ForceGraph2D<GraphNode, GraphLink>
+          <ForceGraph2D
             ref={fgRef}
-            graphData={filteredData as ForceGraphData<GraphNode, GraphLink>}
+            graphData={filteredData as any}
             backgroundColor="#0b0b0f"
             nodeRelSize={settings.nodeSize}
-            nodeVal={(n: NodeObject<GraphNode>) => Math.max(2, n.degree ?? 1)}
-            nodeColor={(n: NodeObject<GraphNode>) => TYPE_COLOR[n.type] ?? "#888"}
-            nodeLabel={(n: NodeObject<GraphNode>) => `${n.label}（${n.type} | 度数: ${n.degree}）`}
+            nodeVal={(n: any) => Math.max(2, n.degree ?? 1)}
+            nodeColor={(n: any) => typeColor[n.type] ?? FALLBACK_COLOR}
+            nodeLabel={(n: any) => `${n.label}（${n.type} | 度数: ${n.degree}）`}
             nodeCanvasObjectMode={() => "after"}
-            nodeCanvasObject={(node: NodeObject<GraphNode>, ctx: CanvasRenderingContext2D, scale: number) => {
-              const { x, y } = node;
-              if (typeof x !== "number" || typeof y !== "number" || !isFinite(x) || !isFinite(y)) return;
+            nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, scale: number) => {
+              if (!isFinite(node.x) || !isFinite(node.y)) return;
               const r = Math.max(2, node.degree ?? 1) * 1.2;
               const highlighted = isHighlighted(node.id);
+              const isSearchMode = !!query && !hoverNode;
+
+              // 搜索模式下暗化非匹配节点
+              if (isSearchMode && !highlighted) {
+                ctx.globalAlpha = 0.12;
+              }
               if (highlighted) {
-                const color = TYPE_COLOR[node.type] ?? "#fff";
-                const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+                const color = typeColor[node.type] ?? "#fff";
+                const grad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r * 4);
                 grad.addColorStop(0, color + "66");
                 grad.addColorStop(1, "transparent");
                 ctx.fillStyle = grad;
                 ctx.beginPath();
-                ctx.arc(x, y, r * 4, 0, 2 * Math.PI);
+                ctx.arc(node.x, node.y, r * 4, 0, 2 * Math.PI);
                 ctx.fill();
               }
               if (scale > 1.2 || highlighted) {
@@ -441,20 +643,23 @@ export default function GraphPage() {
                 const alpha = highlighted ? 1 : settings.textOpacity;
                 ctx.fillStyle = `rgba(255,255,255,${alpha})`;
                 ctx.textAlign = "center";
-                ctx.fillText(node.label ?? String(node.id), x, y + r + 10 / scale);
+                ctx.fillText(node.label ?? node.id, node.x, node.y + r + 10 / scale);
+              }
+              if (isSearchMode && !highlighted) {
+                ctx.globalAlpha = 1;
               }
             }}
-            linkColor={(l: LinkObject<GraphNode, GraphLink>) => {
+            linkColor={(l: any) => {
               const sid = typeof l.source === "object" ? l.source.id : l.source;
               const tid = typeof l.target === "object" ? l.target.id : l.target;
               if (!hoverNode) return "rgba(255,255,255,0.12)";
               const on = sid === hoverNode.id || tid === hoverNode.id;
               return on ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.06)";
             }}
-            linkWidth={(l: LinkObject<GraphNode, GraphLink>) => (l.weight ?? 0.5) * settings.linkWidth}
+            linkWidth={(l: any) => (l.weight ?? 0.5) * settings.linkWidth}
             linkDirectionalArrowLength={settings.showArrows ? 6 : 0}
             linkDirectionalArrowRelPos={1}
-            linkDirectionalParticles={(l: LinkObject<GraphNode, GraphLink>) => {
+            linkDirectionalParticles={(l: any) => {
               if (!hoverNode) return 0;
               const sid = typeof l.source === "object" ? l.source.id : l.source;
               const tid = typeof l.target === "object" ? l.target.id : l.target;
@@ -464,8 +669,9 @@ export default function GraphPage() {
             d3AlphaDecay={0.02}
             d3VelocityDecay={0.3}
             cooldownTicks={120}
-            onNodeHover={(n: NodeObject<GraphNode> | null) => setHoverNode(n)}
+            onNodeHover={(n: any) => setHoverNode(n)}
             onNodeClick={handleNodeClick}
+            onRenderFramePost={onRenderFramePost}
           />
         )}
       </div>

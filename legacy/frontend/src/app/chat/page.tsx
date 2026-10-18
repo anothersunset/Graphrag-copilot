@@ -17,12 +17,18 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => { scrollToBottom(); }, [messages]);
+
+  // 组件卸载时中止流式请求，避免连接泄漏
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,10 +56,14 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
+      const abortController = new AbortController();
+      abortRef.current = abortController;
+
       const response = await fetch(`${API_BASE}/api/query/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: input, top_k: 5 }),
+        signal: abortController.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -63,6 +73,7 @@ export default function ChatPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let shouldBreak = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -98,6 +109,8 @@ export default function ChatPage() {
                     : m
                 )
               );
+              shouldBreak = true;
+              break;
             } else if (event.type === "error") {
               setMessages((prev) =>
                 prev.map((m) =>
@@ -110,13 +123,17 @@ export default function ChatPage() {
                     : m
                 )
               );
+              shouldBreak = true;
+              break;
             }
           } catch {
             // skip malformed lines
           }
         }
+        if (shouldBreak) break;
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -130,6 +147,7 @@ export default function ChatPage() {
       );
     } finally {
       setLoading(false);
+      abortRef.current = null;
     }
   };
 

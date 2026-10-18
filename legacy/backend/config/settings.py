@@ -18,14 +18,11 @@ class Settings(BaseSettings):
     GRAPH_DB_DIR: Path = DATA_DIR / "graph_db"
 
     LLM_PROVIDER: str = "openai"
-    LLM_MODEL: str = "glm-4-flash"
+    LLM_MODEL: str = "deepseek-chat"
     LLM_API_KEY: Optional[str] = None
-    LLM_BASE_URL: Optional[str] = None
+    LLM_BASE_URL: str = "https://api.deepseek.com"
     LLM_TEMPERATURE: float = 0.3
     LLM_MAX_TOKENS: int = 4096
-
-    ZHIPU_API_KEY: Optional[str] = None
-    ZHIPU_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
 
     EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
     EMBEDDING_DIMENSION: int = 512
