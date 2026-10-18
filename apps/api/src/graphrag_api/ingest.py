@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from graphrag_kg import Chunk, build_index
+from graphrag_kg.community import ChatFn
 from graphrag_parsers import SemanticChunker
 
 from graphrag_api.config import settings
@@ -41,6 +42,24 @@ logger = logging.getLogger(__name__)
 MANIFEST_NAME = "manifest.json"
 CHUNKS_NAME = "chunks.jsonl"
 BM25_NAME = "bm25.pkl"
+
+# LLM extraction calls are unbounded generations over whole-document chunks
+# (reasoning models are slower still) — give them generous headroom.
+_LLM_EXTRACTION_TIMEOUT_S = 300.0
+
+
+def chat_fn_from_settings() -> ChatFn | None:
+    """Adapt the configured LLM into the indexer's ``ChatFn``; None offline."""
+    from graphrag_api.runtime import build_llm_client
+
+    client = build_llm_client(settings)
+    if client is None:
+        return None
+
+    def chat(system: str, user: str) -> str:
+        return client.complete(model="", system=system, user=user, timeout_s=_LLM_EXTRACTION_TIMEOUT_S)
+
+    return chat
 
 # Entity/rel names end up in Qdrant payloads and Neo4j MERGE keys; keep the
 # JSONL encoding-tolerant by banning only control chars/newlines.
@@ -174,14 +193,20 @@ def run_ingest(
     max_tokens: int = 512,
     overlap_tokens: int = 64,
     save_index_path: Path | None = None,
+    llm: ChatFn | None = None,
 ) -> IngestReport:
-    """Run every provisioning step that has its dependencies available."""
+    """Run every provisioning step that has its dependencies available.
+
+    ``llm`` (``(system, user) -> str``) enables LLM gleaning extraction +
+    abstractive community summaries in the persisted index; without it the
+    deterministic co-occurrence pipeline is used.
+    """
     docs = load_corpus(corpus_path)
     chunks = fine_chunks(docs, max_tokens=max_tokens, overlap_tokens=overlap_tokens)
     if not chunks:
         raise ValueError("chunking produced no chunks from a non-empty corpus")
 
-    index = build_index(chunks)
+    index = build_index(chunks, llm=llm)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     chunks_path = out_dir / CHUNKS_NAME
@@ -289,6 +314,11 @@ def main(argv: list[str] | None = None) -> int:
             "Serve with GRAPHRAG_INDEX_PATH."
         ),
     )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Force the offline co-occurrence pipeline even when LLM env is configured.",
+    )
     parser.add_argument("--neo4j-uri", default=None, help="e.g. bolt://localhost:7687")
     parser.add_argument("--neo4j-user", default="neo4j")
     parser.add_argument("--neo4j-password", default=None)
@@ -325,6 +355,18 @@ def main(argv: list[str] | None = None) -> int:
             args.out_dir / "index.json" if str(args.save_index) == "__out_dir__" else args.save_index
         )
 
+    llm: ChatFn | None = None
+    if not args.no_llm:
+        llm = chat_fn_from_settings()
+        if llm is not None:
+            logger.info(
+                "LLM extraction enabled: model=%s base=%s",
+                settings.llm_model,
+                settings.llm_base_url,
+            )
+        else:
+            logger.info("LLM not configured — using the offline co-occurrence pipeline")
+
     run_ingest(
         args.corpus,
         args.out_dir,
@@ -337,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
         max_tokens=args.max_tokens,
         overlap_tokens=args.overlap_tokens,
         save_index_path=save_index_path,
+        llm=llm,
     )
     print(f"ingested {args.corpus} -> {args.out_dir}")
     print("serve it with:")

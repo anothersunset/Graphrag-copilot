@@ -59,6 +59,7 @@ logs/
 data/qdrant/
 data/neo4j/
 data/uploads/
+data/index/
 
 # Build artifacts
 *.pyc

@@ -163,3 +163,33 @@ def test_run_ingest_save_index_writes_loadable_artifact(tmp_path):
     restored = load_index(artifact)
     assert restored.stats() == report.kg_stats
     assert len(restored.chunk_texts) == report.chunks
+
+
+def test_run_ingest_uses_injected_llm_for_extraction(tmp_path):
+    """The configured LLM must flow into build_index — gleaning extraction
+    is what makes the persisted index richer than the co-occurrence base."""
+    from graphrag_kg import load_index
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "doc1.md").write_text(CORPUS[0].content, encoding="utf-8")
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_chat(system: str, user: str) -> str:
+        calls.append((system, user))
+        return (
+            '{"entities": [{"name": "LLM注入实体", "type": "Concept", '
+            '"confidence": 0.9, "source_chunk_ids": ["doc1.md:0"]}], '
+            '"relations": []}'
+        )
+
+    run_ingest(
+        tmp_path / "corpus",
+        tmp_path / "index",
+        save_index_path=tmp_path / "artifacts" / "index.json",
+        llm=fake_chat,
+    )
+    assert calls, "chat fn must be invoked for extraction"
+    restored = load_index(tmp_path / "artifacts" / "index.json")
+    assert "LLM注入实体" in restored.graph.graph.nodes
